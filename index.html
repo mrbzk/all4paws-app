@@ -91,6 +91,10 @@ button,input,select,textarea{font:inherit;color:inherit}
 .btn.sso svg{width:20px;height:20px;flex:none}
 .btn.sso.fb{background:#1877F2;border-color:#1877F2;color:#fff}
 .btn.sso.fb:hover{filter:brightness(1.06);background:#1877F2}
+.authtabs{display:flex;gap:4px;background:var(--line);padding:4px;border-radius:999px}
+.authtabs button{all:unset;flex:1;text-align:center;padding:9px 12px;border-radius:999px;font-weight:600;cursor:pointer;color:var(--ink)}
+.authtabs button.on{background:var(--surface);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.authtabs button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .or{display:flex;align-items:center;gap:12px;color:var(--muted,#6b7280);font-size:.85rem}
 .or::before,.or::after{content:"";flex:1;height:1px;background:var(--line)}
 
@@ -1319,9 +1323,10 @@ function ssoFinish(user, name) {
     render(); return;
   }
   const nm = (user && user.displayName) || "";
-  S.draft = Object.assign(S.draft || { repeat: 1 }, { c_email: em, c_name: S.draft && S.draft.c_name ? S.draft.c_name : nm });
-  toast("Welcome" + (nm ? ", " + nm.split(" ")[0] : "") + ". Book your first visit and your account is set up.");
-  location.hash = "book"; render();
+  createCustomer(nm, em, (user && user.phoneNumber) || "", "").then(({ cl }) => {
+    S.me = cl.id; S.portalTab = "signin"; remember();
+    toast("Account created. Welcome" + (nm ? ", " + nm.split(" ")[0] : "") + "!"); render();
+  }).catch(() => {});
 }
 async function ssoSignIn(name) {
   if (S.mode !== "live" || !FB_APP) { toast(name + " sign-in works on the live site. In this preview, use your email."); return; }
@@ -1351,10 +1356,30 @@ const SSO_HTML = '<div class="social" aria-label="Sign in with another account">
   '<button type="button" class="btn sso" data-act="sso" data-id="Microsoft"><svg viewBox="0 0 23 23" aria-hidden="true"><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M12 1h10v10H12z"/><path fill="#00A4EF" d="M1 12h10v10H1z"/><path fill="#FFB900" d="M12 12h10v10H12z"/></svg><span>Continue with Microsoft</span></button>' +
   '<button type="button" class="btn sso fb" data-act="sso" data-id="Facebook"><svg viewBox="0 0 24 24" aria-hidden="true"><path fill="#fff" d="M24 12.07C24 5.4 18.63 0 12 0S0 5.4 0 12.07C0 18.1 4.39 23.1 10.13 24v-8.44H7.08v-3.49h3.05V9.41c0-3.02 1.79-4.69 4.53-4.69 1.31 0 2.68.24 2.68.24v2.97h-1.51c-1.49 0-1.96.93-1.96 1.89v2.25h3.33l-.53 3.49h-2.8V24C19.61 23.1 24 18.1 24 12.07z"/></svg><span>Continue with Facebook</span></button>' +
   '</div><div class="or" aria-hidden="true">or use your email</div>';
+function portalAuth(sample) {
+  const up = S.portalTab === "signup";
+  const tabs = '<div class="authtabs" role="tablist"><button type="button" role="tab" aria-selected="' + !up + '" class="' + (up ? "" : "on") + '" data-act="auth-tab" data-id="signin">Sign in</button><button type="button" role="tab" aria-selected="' + up + '" class="' + (up ? "on" : "") + '" data-act="auth-tab" data-id="signup">Create account</button></div>';
+  const err = S.portalErr ? '<div class="errors" role="alert">' + esc(S.portalErr) + "</div>" : "";
+  if (!up) return '<div class="wrap" style="padding:40px 20px;max-width:520px"><form class="card stack" data-form="signin">' + tabs + '<h2>Welcome back</h2><p class="muted">Sign in to see your bookings, report cards and invoices.</p>' + SSO_HTML + '<div class="field"><label for="si-email">Email</label><input type="email" id="si-email" name="email" required autocomplete="email" value="' + esc(S.portalEmail) + '"></div>' + err + '<button class="btn primary" type="submit">Sign in</button>' + sample + '<p class="small muted">New here? <button type="button" class="linkbtn" data-act="auth-tab" data-id="signup">Create an account</button></p></form></div>';
+  const v = S.signup || {};
+  return '<div class="wrap" style="padding:40px 20px;max-width:520px"><form class="card stack" data-form="signup">' + tabs + '<h2>Create your account</h2><p class="muted">Set up your account once, then book walks, stays and grooms in a few taps.</p>' + SSO_HTML.replace(/Continue with/g, "Sign up with").replace("or use your email", "or sign up with your email") +
+    '<div class="field"><label for="su-name">Your name</label><input type="text" id="su-name" name="name" required autocomplete="name" value="' + esc(v.name || "") + '"></div>' +
+    '<div class="field"><label for="su-email">Email</label><input type="email" id="su-email" name="email" required autocomplete="email" value="' + esc(v.email || S.portalEmail || "") + '"></div>' +
+    '<div class="field"><label for="su-phone">Mobile</label><input type="tel" id="su-phone" name="phone" autocomplete="tel" value="' + esc(v.phone || "") + '"></div>' +
+    '<div class="field"><label for="su-addr">Pick-up address <span class="muted small">(optional)</span></label><input type="text" id="su-addr" name="address" autocomplete="street-address" value="' + esc(v.address || "") + '"></div>' +
+    err + '<button class="btn primary" type="submit">Create account</button><p class="small muted">Already have an account? <button type="button" class="linkbtn" data-act="auth-tab" data-id="signin">Sign in</button></p></form></div>';
+}
+async function createCustomer(name, email, phone, address) {
+  const em = String(email || "").trim().toLowerCase();
+  const found = S.clients.find(c => (c.email || "").toLowerCase() === em);
+  if (found) return { cl: found, isNew: false };
+  const cl = { id: uid("c"), name: String(name || "").trim() || em.split("@")[0], email: em, phone: phone || "", address: address || "", notes: "", approved: false, createdAt: new Date().toISOString() };
+  await put("clients", cl); return { cl, isNew: true };
+}
 function viewPortal() {
   if (!S.me || !client(S.me)) {
     const sample = S.mode === "demo" ? '<p class="small muted">Demo accounts: hannah@example.com, ward@example.com, marta@example.com</p>' : "";
-    return '<div class="wrap" style="padding:40px 20px;max-width:520px"><form class="card stack" data-form="signin"><h2>My account</h2><p class="muted">Sign in to see your bookings, report cards and invoices.</p>' + SSO_HTML + '<div class="field"><label for="si-email">Email</label><input type="email" id="si-email" name="email" required value="' + esc(S.portalEmail) + '"></div>' + (S.portalErr ? '<div class="errors" role="alert">' + esc(S.portalErr) + "</div>" : "") + '<button class="btn primary" type="submit">Show my account</button>' + sample + '<p class="small muted">This prototype signs in by email only. The live version would send a one-time login link.</p></form></div>';
+    return portalAuth(sample);
   }
   const me = client(S.me); const t = todayISO();
   const mine = S.bookings.filter(b => b.clientId === me.id);
@@ -1725,6 +1750,7 @@ async function handleClick(e) {
     case "book-again": S.done = null; render(); break;
     case "submit-booking": await submitBooking(); break;
     case "sso": await ssoSignIn(id); break;
+    case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); location.hash = "admin"; render(); window.scrollTo(0, 0); break;
@@ -1814,6 +1840,19 @@ document.addEventListener("submit", async (e) => {
 });
 async function handleSubmit(e) {
   const f = e.target; const fd = new FormData(f); const kind = f.dataset.form;
+  if (kind === "signup") {
+    const v = { name: String(fd.get("name") || "").trim(), email: String(fd.get("email") || "").trim().toLowerCase(), phone: String(fd.get("phone") || "").trim(), address: String(fd.get("address") || "").trim() };
+    S.signup = v; S.portalErr = "";
+    if (!v.name) S.portalErr = "Add your name.";
+    else if (!/^\S+@\S+\.\S+$/.test(v.email)) S.portalErr = "Add a valid email address.";
+    if (S.portalErr) { render(); return; }
+    try {
+      const { cl, isNew } = await createCustomer(v.name, v.email, v.phone, v.address);
+      S.me = cl.id; S.signup = null; S.portalTab = "signin"; remember();
+      toast(isNew ? "Account created. Welcome, " + cl.name.split(" ")[0] + "!" : "You already had an account, so you're signed in.");
+    } catch (e) {}
+    render(); return;
+  }
   if (kind === "signin") {
     const em = String(fd.get("email") || "").trim().toLowerCase(); S.portalEmail = em;
     const cl = S.clients.find(c => (c.email || "").toLowerCase() === em);
