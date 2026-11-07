@@ -9,7 +9,8 @@
       "build.py",
       "src/**",
       "**/.*",
-      "deploy.sh"
+      "deploy.sh",
+      "cloudshell-deploy.sh"
     ],
     "headers": [
       {
