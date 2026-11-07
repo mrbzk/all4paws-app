@@ -14,7 +14,7 @@ if ! firebase apps:list WEB --project "$P" 2>/dev/null | grep -q "Booking app"; 
   firebase apps:create WEB "Booking app" --project "$P"
 fi
 echo "== Making sure the Hosting site exists"
-firebase hosting:sites:create "$P" --project "$P" >/dev/null 2>&1 || true
+firebase hosting:sites:create "$P" --project "$P" --non-interactive </dev/null >/dev/null 2>&1 || true
 echo "== Building and deploying"
 python3 build.py src/index.html
 firebase deploy --only hosting,firestore:rules --project "$P" --non-interactive
