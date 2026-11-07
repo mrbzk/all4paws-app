@@ -848,6 +848,7 @@ async function firebaseBackend(conf) {
   const B = "https://www.gstatic.com/firebasejs/10.12.2/";
   const [A, F, ST] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-firestore.js"), import(B + "firebase-storage.js")]);
   const app = A.initializeApp(conf);
+  FB_APP = app; setTimeout(ssoRedirectResult, 0);
   let fdb; try { fdb = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); } catch (e) { fdb = F.getFirestore(app); }
   const code = e => (e && e.code === "permission-denied" ? "invalid_argument" : e && e.code === "resource-exhausted" ? "resource_exhausted" : "unavailable");
   const wrap = sn => ({ id: sn.id, exists: sn.exists(), data: () => sn.data(), metadata: { fromCache: sn.metadata.fromCache, hasPendingWrites: sn.metadata.hasPendingWrites } });
@@ -1286,6 +1287,65 @@ async function submitBooking() {
 function remember() { try { if (S.me) sessionStorage.setItem("dogco-me", S.me); else sessionStorage.removeItem("dogco-me"); } catch (e) {} }
 
 // ----- portal -----
+let FB_APP = null, FB_AUTH = null;
+const SSO_NAMES = { "google.com": "Google", "microsoft.com": "Microsoft", "facebook.com": "Facebook" };
+async function ssoAuth() {
+  if (FB_AUTH) return FB_AUTH;
+  const M = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+  FB_AUTH = { M, auth: M.getAuth(FB_APP) }; return FB_AUTH;
+}
+function ssoProvider(M, name) {
+  if (name === "Google") { const p = new M.GoogleAuthProvider(); p.setCustomParameters({ prompt: "select_account" }); return p; }
+  if (name === "Microsoft") { const p = new M.OAuthProvider("microsoft.com"); p.addScope("email"); p.setCustomParameters({ prompt: "select_account" }); return p; }
+  const p = new M.FacebookAuthProvider(); p.addScope("email"); return p;
+}
+function ssoFail(e, name) {
+  const c = (e && e.code) || "";
+  if (c === "auth/popup-closed-by-user" || c === "auth/cancelled-popup-request") return;
+  if (c === "auth/operation-not-allowed" || c === "auth/configuration-not-found") toast(name + " sign-in isn't switched on yet. Use your email for now.");
+  else if (c === "auth/account-exists-with-different-credential") toast("That email already signs in another way. Try the other button.");
+  else if (c === "auth/unauthorized-domain") toast("This web address isn't allowed to sign in yet. Use your email for now.");
+  else if (c === "auth/network-request-failed") toast("No connection. Try again when you're online.");
+  else toast("Couldn't sign in with " + name + ". Use your email for now.");
+}
+function ssoFinish(user, name) {
+  const em = String((user && (user.email || (user.providerData || []).map(x => x.email).find(Boolean))) || "").trim().toLowerCase();
+  if (!em) { toast(name + " didn't share an email address. Use your email below."); return; }
+  S.portalEmail = em; S.portalErr = "";
+  const cl = S.clients.find(c => (c.email || "").toLowerCase() === em);
+  if (cl) {
+    S.me = cl.id; remember(); toast("Signed in as " + cl.name.split(" ")[0]);
+    if (view() === "messages") markRead(cl.id, "client");
+    render(); return;
+  }
+  const nm = (user && user.displayName) || "";
+  S.draft = Object.assign(S.draft || { repeat: 1 }, { c_email: em, c_name: S.draft && S.draft.c_name ? S.draft.c_name : nm });
+  toast("Welcome" + (nm ? ", " + nm.split(" ")[0] : "") + ". Book your first visit and your account is set up.");
+  location.hash = "book"; render();
+}
+async function ssoSignIn(name) {
+  if (S.mode !== "live" || !FB_APP) { toast(name + " sign-in works on the live site. In this preview, use your email."); return; }
+  try {
+    const { M, auth } = await ssoAuth(); const prov = ssoProvider(M, name);
+    try { const r = await M.signInWithPopup(auth, prov); ssoFinish(r.user, name); }
+    catch (e) {
+      if (e && (e.code === "auth/popup-blocked" || e.code === "auth/operation-not-supported-in-this-environment")) {
+        try { sessionStorage.setItem("dogco-sso", name); } catch (x) {}
+        await M.signInWithRedirect(auth, prov); return;
+      }
+      throw e;
+    }
+  } catch (e) { ssoFail(e, name); }
+}
+async function ssoRedirectResult() {
+  let pending = null; try { pending = sessionStorage.getItem("dogco-sso"); sessionStorage.removeItem("dogco-sso"); } catch (x) {}
+  if (!pending) return;
+  try {
+    const { M, auth } = await ssoAuth(); const r = await M.getRedirectResult(auth);
+    if (r && r.user) { const go = () => (S.mode === "live" ? ssoFinish(r.user, pending) : setTimeout(go, 300)); go(); }
+  } catch (e) { ssoFail(e, pending); }
+}
+function ssoSignOut() { if (FB_AUTH) FB_AUTH.M.signOut(FB_AUTH.auth).catch(() => {}); }
 const SSO_HTML = '<div class="social" aria-label="Sign in with another account">' +
   '<button type="button" class="btn sso" data-act="sso" data-id="Google"><svg viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.5H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.4-.4-3.5z"/><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3.1l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z"/><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z"/><path fill="#1976D2" d="M43.6 20.5H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.4-.4-3.5z"/></svg><span>Continue with Google</span></button>' +
   '<button type="button" class="btn sso" data-act="sso" data-id="Microsoft"><svg viewBox="0 0 23 23" aria-hidden="true"><path fill="#F25022" d="M1 1h10v10H1z"/><path fill="#7FBA00" d="M12 1h10v10H12z"/><path fill="#00A4EF" d="M1 12h10v10H1z"/><path fill="#FFB900" d="M12 12h10v10H12z"/></svg><span>Continue with Microsoft</span></button>' +
@@ -1664,8 +1724,8 @@ async function handleClick(e) {
     case "book-svc": S.draft = { repeat: 1, serviceId: id }; S.done = null; S.errors = []; location.hash = "book"; render(); break;
     case "book-again": S.done = null; render(); break;
     case "submit-booking": await submitBooking(); break;
-    case "sso": toast(id + " sign-in is coming soon. For now, use your email below."); { const f = document.getElementById("si-email"); if (f) f.focus(); } break;
-    case "signout": S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
+    case "sso": await ssoSignIn(id); break;
+    case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); location.hash = "admin"; render(); window.scrollTo(0, 0); break;
     case "bfilter": S.bFilter = id; render(); break;
