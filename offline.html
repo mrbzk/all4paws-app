@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Offline · Nicole's Dog Co.</title>
+<meta name="theme-color" content="#1F5C4F">
+<style>
+  :root{--bg:#F3F5F2;--ink:#16302A;--muted:#5A6B66;--accent:#1F5C4F}
+  @media (prefers-color-scheme: dark){:root{--bg:#0E1614;--ink:#E4EDE9;--muted:#97A9A3;--accent:#5DB59C}}
+  body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);font:17px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;padding:24px;box-sizing:border-box}
+  main{max-width:34ch;text-align:center;display:flex;flex-direction:column;gap:14px;align-items:center}
+  img{width:72px;height:72px;border-radius:18px}
+  h1{font-size:1.5rem;margin:0}
+  p{margin:0;color:var(--muted)}
+  button{font:inherit;font-weight:700;padding:12px 22px;border-radius:999px;border:0;background:var(--accent);color:#fff;cursor:pointer;min-height:44px}
+</style>
+</head>
+<body>
+<main>
+  <img src="icons/icon-192.png" alt="">
+  <h1>You're offline</h1>
+  <p>Open the app once while you're online and it will work without a connection after that.</p>
+  <button onclick="location.reload()">Try again</button>
+</main>
+</body>
+</html>
