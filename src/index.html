@@ -70,6 +70,21 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nav a:hover{color:var(--ink);background:var(--surface-2)}
 .nav a[aria-current="page"]{background:var(--ink);color:var(--bg)}
 .nav a.admin-link{border:1px dashed var(--line)}
+.modesw{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--surface-2,var(--line));border:1px solid var(--line);margin-left:auto}
+.modesw button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;font-weight:700;font-size:.88rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
+.modesw button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.modesw button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.modesw + .nav{margin-left:8px}
+.nav[hidden]{display:none!important}
+body.admin-mode{padding-bottom:0!important}
+@media (max-width:640px){
+  .top .wrap{flex-wrap:nowrap;gap:8px}
+  .brand{min-width:0;font-size:1rem}
+  .brand span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .modesw{flex:none}
+  .modesw button{padding:6px 11px;font-size:.8rem}
+}
+
 .banner{background:var(--sun-soft);color:var(--ink);font-size:.875rem;border-bottom:1px solid var(--line)}
 .banner .wrap{padding-top:8px;padding-bottom:8px}
 
@@ -975,9 +990,14 @@ function needsYou() { return S.bookings.filter(b => b.status === "requested").le
 function render() {
   const v = view(); const c = C();
   document.title = c.businessName + " Platform";
-  const nav = [["home", "Services"], ["book", "Book"], ["messages", "Messages"], ["portal", "My account"]];
-  if (S.canAdmin) nav.push(["admin", "Back office"]);
-  let html = '<header class="top"><div class="wrap"><a class="brand" href="#home">' + LOGO + "<span>" + esc(c.businessName) + '</span></a><nav class="nav" aria-label="Main">' +
+  const isAdmin = v === "admin" && S.canAdmin;
+  if (v !== "admin") S.lastCustView = v;
+  const nav = isAdmin ? [] : [["home", "Services"], ["book", "Book"], ["messages", "Messages"], ["portal", "My account"]];
+  if (!S.canAdmin && v === "admin") nav.push(["admin", "Back office"]);
+  const nY = needsYou() && !isQuiet() ? needsYou() : 0;
+  const modeSw = S.canAdmin ? '<div class="modesw" role="group" aria-label="Switch view"><button type="button" data-act="view-mode" data-id="customer" aria-pressed="' + !isAdmin + '">Customer</button><button type="button" data-act="view-mode" data-id="admin" aria-pressed="' + isAdmin + '">Admin' + (nY && !isAdmin ? ' <span class="nbadge num" aria-label="needs you">' + nY + "</span>" : "") + "</button></div>" : "";
+  document.body.classList.toggle("admin-mode", isAdmin);
+  let html = '<header class="top"><div class="wrap"><a class="brand" href="#home">' + LOGO + "<span>" + esc(c.businessName) + '</span></a>' + modeSw + (nav.length ? '<nav class="nav" aria-label="Main">' : '<nav class="nav" hidden>') +
     nav.map(([k, l]) => '<a href="#' + k + '"' + (k === "admin" ? ' class="admin-link"' : "") + (v === k ? ' aria-current="page"' : "") + ">" + (NAV_IC[k] || "") + "<span>" + l + (k === "messages" && S.me && unreadForClient(S.me) ? ' <span class="nbadge num" aria-label="unread">' + unreadForClient(S.me) + "</span>" : "") + (k === "admin" && needsYou() && !isQuiet() ? ' <span class="nbadge num" aria-label="needs you">' + needsYou() + "</span>" : "") + "</span></a>").join("") + "</nav></div></header>";
   html += appBanners(v);
   if (S.mode === "demo") html += '<div class="banner"><div class="wrap"><strong>Demo mode.</strong> Sample data, and changes last until you reload. ' + (IS_PWA_BUILD ? "Connect the database (firebase-config.js) to save real bookings." : "Open the published page signed in to save real bookings.") + "</div></div>";
@@ -1747,6 +1767,7 @@ async function handleClick(e) {
     case "submit-booking": await submitBooking(); break;
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
+    case "view-mode": location.hash = id === "admin" ? "admin" : (S.lastCustView || "home"); window.scrollTo(0, 0); break;
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); location.hash = "admin"; render(); window.scrollTo(0, 0); break;
