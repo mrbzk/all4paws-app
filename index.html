@@ -286,7 +286,9 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
 .client-list button:focus-visible{outline:3px solid var(--sun)}
 .cfind{margin-bottom:14px;display:flex;flex-direction:column;gap:6px}
 .cfind input{font-size:1rem}
-.cmatches{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.cmatches{border-top:1px solid var(--line);padding-top:6px}
+.cbar{justify-content:space-between;align-items:center;margin-top:6px}
+.call{max-height:55vh;overflow:auto}
 .client-list button{align-items:center}
 .cl-main{display:flex;flex-direction:column;min-width:0}
 .cl-main strong,.cl-pets{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -555,11 +557,11 @@ const DEFAULT_CFG = {
     { id: "s3", name: "Lauren", role: "Groomer", max: 5 }
   ],
   services: [
-    { id: "walk60", cat: "walk", name: "Walk, 1 hour", unit: "walk", price: 15, desc: "A proper hour out with sniff time, play and a towel-down. No travel charge on walks.", vax: false },
+    { id: "walk60", cat: "walk", name: "Walk, 1 hour", unit: "walk", price: 17, desc: "A proper hour out with sniff time, play and a towel-down. No travel charge on walks.", vax: false },
     { id: "dropin", cat: "walk", name: "Drop-in visit", unit: "visit", price: 15, desc: "We pop round to let them out, feed them, refresh water and give them some company.", vax: false },
-    { id: "catdrop", cat: "walk", name: "Cat drop-in", unit: "visit", price: 10, desc: "Feeding, fresh water, litter and a bit of company for your cat.", vax: false },
-    { id: "daycare", cat: "daycare", name: "Daycare", unit: "day", price: 25, desc: "Drop off from 7:30, collect by 18:30. Play, rest periods and a midday walk.", vax: true },
-    { id: "board", cat: "boarding", name: "Overnight stay", unit: "night", price: 35, desc: "A home-from-home stay with walks, your food and routine, and a photo update every evening.", vax: true },
+    { id: "catdrop", cat: "walk", name: "Cat drop-in", unit: "visit", price: 23, desc: "Feeding, fresh water, litter and a bit of company for your cat.", vax: false },
+    { id: "daycare", cat: "daycare", name: "Daycare", unit: "day", price: 32, desc: "Drop off from 7:30, collect by 18:30. Play, rest periods and a midday walk.", vax: true },
+    { id: "board", cat: "boarding", name: "Overnight stay", unit: "night", price: 44, desc: "A home-from-home stay with walks, your food and routine, and a photo update every evening.", vax: true },
     { id: "bath", cat: "groom", name: "Bath and tidy", unit: "groom", sizes: { S: 30, M: 40, L: 52 }, desc: "Wash, blow-dry, brush-out, nails, ears and a face and feet tidy.", vax: false },
     { id: "fullgroom", cat: "groom", name: "Full groom", unit: "groom", sizes: { S: 45, M: 60, L: 78 }, desc: "Everything in the bath and tidy plus a full breed or custom clip.", vax: false },
     { id: "nails", cat: "groom", name: "Nail trim", unit: "groom", price: 12, desc: "Ten minutes, no appointment stress. Add it to any other service.", vax: false }
@@ -1665,6 +1667,8 @@ function adminKennel() {
   h += '<tr><td class="name"><strong>Runs used</strong></td>' + days.map(d => { const conf = stays.filter(b => occupiesNight(b, d)).reduce((s, b) => s + (b.petIds || []).length, 0); const req = S.bookings.filter(b => b.status === "requested" && occupiesNight(b, d)).reduce((s, b) => s + (b.petIds || []).length, 0); return '<td class="occ num' + (conf >= c.kennelRuns ? " full" : "") + (d === t ? " today" : "") + '">' + conf + (req ? '<span class="muted">+' + req + "</span>" : "") + "</td>"; }).join("") + "</tr></tbody></table></div>";
   return h;
 }
+function recentIds() { try { return JSON.parse(localStorage.getItem("dogco-recent-c") || "[]"); } catch (e) { return []; } }
+function addRecent(id) { const r = [id].concat(recentIds().filter(x => x !== id)).slice(0, 6); try { localStorage.setItem("dogco-recent-c", JSON.stringify(r)); } catch (e) {} }
 function digits(v) { let d = String(v || "").replace(/\D/g, ""); if (d.startsWith("44")) d = "0" + d.slice(2); return d; }
 function clientMatches(c, q) {
   if (!q) return true;
@@ -1679,8 +1683,13 @@ function adminClients() {
   const owes = c => S.bookings.some(b => b.clientId === c.id && b.status === "completed" && !b.paid);
   let h = '<div class="head"><div><h2>Customers</h2><p class="muted">' + S.clients.length + " customers, " + S.pets.length + ' pets.</p></div><button class="btn primary" data-act="client-new">Add customer</button></div>';
   const MAX = 8; const shown = list.slice(0, MAX);
+  const row = c => '<button role="listitem" data-act="csel" data-id="' + esc(c.id) + '"' + (sel && sel.id === c.id ? ' aria-current="true"' : "") + '><span class="cl-main"><strong>' + esc(c.name) + '</strong><span class="small muted cl-pets">' + esc([petsOf(c.id).map(p => p.name).join(", "), c.phone].filter(Boolean).join(" · ") || "No pets") + "</span></span>" + (c.approved === false ? '<span class="pill requested">New</span>' : owes(c) ? '<span class="pill unpaid">Owes</span>' : "") + "</button>";
+  const recent = recentIds().map(client).filter(Boolean);
+  const browse = q ? "" : (S.cAll
+    ? '<div class="row cbar"><span class="small muted">All customers, A to Z</span><button type="button" class="btn sm" data-act="c-all">Hide list</button></div><div class="client-list cmatches call" role="list">' + list.map(row).join("") + "</div>"
+    : (recent.length ? '<div class="row cbar"><span class="small muted">Recent</span></div><div class="client-list cmatches" role="list">' + recent.map(row).join("") + "</div>" : "") + '<div><button type="button" class="btn sm" data-act="c-all">View all customers (' + S.clients.length + ")</button></div>");
   h += '<div class="card cfind"><label for="c-search">Find a customer</label><input type="search" id="c-search" data-q="1" placeholder="Name, email, dog or phone number" autocomplete="off" value="' + esc(S.cQuery) + '">' +
-    (q ? (list.length ? '<div class="client-list cmatches" role="list">' + shown.map(c => '<button role="listitem" data-act="csel" data-id="' + esc(c.id) + '"' + (sel && sel.id === c.id ? ' aria-current="true"' : "") + '><span class="cl-main"><strong>' + esc(c.name) + '</strong><span class="small muted cl-pets">' + esc([petsOf(c.id).map(p => p.name).join(", "), c.phone].filter(Boolean).join(" · ") || "No pets") + "</span></span>" + (c.approved === false ? '<span class="pill requested">New</span>' : owes(c) ? '<span class="pill unpaid">Owes</span>' : "") + "</button>").join("") + "</div>" + (list.length > MAX ? '<p class="small muted">' + (list.length - MAX) + " more. Keep typing to narrow it down.</p>" : "") : '<p class="small muted" role="status">No matches. Try part of a name, a dog\'s name or the last few digits of a phone number.</p>') : "") + "</div>";
+    (q ? (list.length ? '<div class="client-list cmatches" role="list">' + shown.map(row).join("") + "</div>" + (list.length > MAX ? '<p class="small muted">' + (list.length - MAX) + " more. Keep typing to narrow it down.</p>" : "") : '<p class="small muted" role="status">No matches. Try part of a name, a dog\'s name or the last few digits of a phone number.</p>') : browse) + "</div>";
   h += '<div class="cdetail">';
   if (!sel) return h + '<div class="empty">' + (S.clients.length ? "Search above to open a customer's details." : "No customers yet. Add one, or they appear here when someone books.") + "</div></div>";
   const hist = S.bookings.filter(b => b.clientId === sel.id).sort((a, b) => b.date.localeCompare(a.date));
@@ -1857,7 +1866,8 @@ async function handleClick(e) {
     case "client-approve": { const cl = client(id); if (cl) { await put("clients", Object.assign({}, cl, { approved: true })); toast(cl.name + " approved"); } break; }
     case "approve-clean": { const list = S.bookings.filter(b => b.status === "requested" && !approvalChecks(b).some(x => x.lvl !== "ok")); for (const b of list) await patchBooking(b.id, { status: "confirmed", staffId: b.staffId || defaultStaff(C(), b.cat).id, decision: { by: "Bulk approval", at: new Date().toISOString(), message: "" } }); toast(list.length + " approved and added to the diary"); break; }
     case "week": S.weekStart = id === "0" ? null : addDays(S.weekStart || todayISO(), Number(id)); render(); break;
-    case "csel": S.cSel = id; render(); break;
+    case "csel": S.cSel = id; S.cAll = false; addRecent(id); render(); { const d = document.querySelector(".cdetail"); if (d && d.getBoundingClientRect().top > window.innerHeight * 0.6) d.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
+    case "c-all": S.cAll = !S.cAll; render(); break;
     case "client-new": S.modal = { type: "client" }; render(); break;
     case "client-edit": S.modal = { type: "client", id }; render(); break;
     case "pet-new": S.modal = { type: "pet", client: el.dataset.client }; render(); break;
