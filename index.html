@@ -308,6 +308,7 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
 .modal .row.end{justify-content:flex-end}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:999px;font-weight:600;z-index:60;box-shadow:var(--shadow)}
 .checks{display:flex;gap:8px;flex-wrap:wrap}
+.flabel{display:block;font-weight:600;font-size:.875rem}
 .checks label{display:flex;gap:6px;align-items:center;font-weight:500;border:1px solid var(--line);padding:6px 10px;border-radius:999px;margin:0;cursor:pointer}
 /* ===== Mobile ===== */
 .nav .ic{display:none}
@@ -547,11 +548,11 @@ const DEFAULT_CFG = {
     { id: "s3", name: "Lauren", role: "Groomer", max: 5 }
   ],
   services: [
-    { id: "walk30", cat: "walk", name: "Solo walk, 30 min", unit: "walk", price: 15, desc: "One-to-one lead walk, ideal for puppies, seniors and reactive dogs.", vax: false },
-    { id: "walk60", cat: "walk", name: "Solo walk, 60 min", unit: "walk", price: 24, desc: "A proper hour out with sniff time, training reinforcement and a towel-down.", vax: false },
-    { id: "group", cat: "walk", name: "Group adventure, 90 min", unit: "walk", price: 18, desc: "Small pack walks (max 6) for social dogs. Pick-up and drop-off included.", vax: true },
-    { id: "daycare", cat: "daycare", name: "Daycare", unit: "day", price: 28, desc: "Drop off from 7:30, collect by 18:30. Play, rest periods and a midday walk.", vax: true },
-    { id: "board", cat: "boarding", name: "Overnight boarding", unit: "night", price: 40, desc: "Their own run, two walks a day, your food and routine, a photo update every evening.", vax: true },
+    { id: "walk60", cat: "walk", name: "Walk, 1 hour", unit: "walk", price: 15, desc: "A proper hour out with sniff time, play and a towel-down. No travel charge on walks.", vax: false },
+    { id: "dropin", cat: "walk", name: "Drop-in visit", unit: "visit", price: 15, desc: "We pop round to let them out, feed them, refresh water and give them some company.", vax: false },
+    { id: "catdrop", cat: "walk", name: "Cat drop-in", unit: "visit", price: 10, desc: "Feeding, fresh water, litter and a bit of company for your cat.", vax: false },
+    { id: "daycare", cat: "daycare", name: "Daycare", unit: "day", price: 25, desc: "Drop off from 7:30, collect by 18:30. Play, rest periods and a midday walk.", vax: true },
+    { id: "board", cat: "boarding", name: "Overnight stay", unit: "night", price: 35, desc: "A home-from-home stay with walks, your food and routine, and a photo update every evening.", vax: true },
     { id: "bath", cat: "groom", name: "Bath and tidy", unit: "groom", sizes: { S: 30, M: 40, L: 52 }, desc: "Wash, blow-dry, brush-out, nails, ears and a face and feet tidy.", vax: false },
     { id: "fullgroom", cat: "groom", name: "Full groom", unit: "groom", sizes: { S: 45, M: 60, L: 78 }, desc: "Everything in the bath and tidy plus a full breed or custom clip.", vax: false },
     { id: "nails", cat: "groom", name: "Nail trim", unit: "groom", price: 12, desc: "Ten minutes, no appointment stress. Add it to any other service.", vax: false }
@@ -559,11 +560,11 @@ const DEFAULT_CFG = {
 };
 // per: "dog" once per dog, "dognight" per dog per night, "booking" once per booking, "night" per night per booking
 DEFAULT_CFG.addons = [
-  { id: "a-wipe", name: "Paw and coat wipe-down", desc: "Muddy paws and belly cleaned before we drop them home.", price: 3, per: "dog", services: ["walk30", "walk60", "group"], active: true },
-  { id: "a-extra15", name: "Extra 15 minutes", desc: "Stretch the walk for dogs with energy to burn.", price: 6, per: "dog", services: ["walk30", "walk60"], active: true },
-  { id: "a-train", name: "Lead-manners training", desc: "Ten minutes of loose-lead and recall practice on the walk.", price: 8, per: "dog", services: ["walk30", "walk60"], active: true },
-  { id: "a-feed", name: "Feed and fresh water on return", desc: "We serve their meal and refresh water before we leave.", price: 2, per: "booking", services: ["walk30", "walk60", "group"], active: true },
-  { id: "a-taxi", name: "Pick-up and drop-off", desc: "Door-to-door transport within our area.", price: 8, per: "booking", services: ["daycare", "board"], active: true },
+  { id: "a-wipe", name: "Paw and coat wipe-down", desc: "Muddy paws and belly cleaned before we drop them home.", price: 3, per: "dog", services: ["walk60"], active: true },
+  { id: "a-extra15", name: "Extra 15 minutes", desc: "Stretch the walk for dogs with energy to burn.", price: 6, per: "dog", services: ["walk60"], active: true },
+  { id: "a-train", name: "Lead-manners training", desc: "Ten minutes of loose-lead and recall practice on the walk.", price: 8, per: "dog", services: ["walk60"], active: true },
+  { id: "a-feed", name: "Feed and fresh water on return", desc: "We serve their meal and refresh water before we leave.", price: 2, per: "booking", services: ["walk60"], active: true },
+  { id: "a-taxi", name: "Pick-up and drop-off", desc: "Door to door, £10 each way. Some addresses cost a little more and we\'ll confirm.", price: 20, per: "booking", services: ["daycare", "board"], active: true },
   { id: "a-enrich", name: "Enrichment session", desc: "Puzzle feeders and sniff games, one to one.", price: 6, per: "dog", services: ["daycare"], active: true },
   { id: "a-goinghome", name: "Bath before going home", desc: "A wash and blow-dry on the last day so they come home clean.", price: 22, per: "dog", services: ["daycare", "board"], active: true },
   { id: "a-eveningwalk", name: "Extra evening walk", desc: "A third walk each day of the stay.", price: 8, per: "dognight", services: ["board"], active: true },
@@ -739,9 +740,9 @@ function fmtDate(s, opts) { if (!s) return ""; return parse(s).toLocaleDateStrin
 function makeSample(t) {
   const cfg = DEFAULT_CFG; const svc = id => cfg.services.find(s => s.id === id);
   const clients = [
-    { id: "c1", name: "Hannah Price", email: "hannah@example.com", phone: "07700 900101", address: "14 Mill Lane", notes: "Key in lockbox, code given at meet and greet.", prices: { walk30: 13 } },
+    { id: "c1", name: "Hannah Price", email: "hannah@example.com", phone: "07700 900101", address: "14 Mill Lane", notes: "Key in lockbox, code given at meet and greet.", prices: { walk60: 13 } },
     { id: "c2", name: "Tom and Lucy Ward", email: "ward@example.com", phone: "07700 900102", address: "3 Orchard Close", notes: "", prices: { board: 36 } },
-    { id: "c3", name: "Marta Kowalska", email: "marta@example.com", phone: "07700 900103", address: "Flat 2, 88 High Street", notes: "Prefers WhatsApp.", notify: "whatsapp", prices: { group: 20, board: 45, bath: { L: 55 } } },
+    { id: "c3", name: "Marta Kowalska", email: "marta@example.com", phone: "07700 900103", address: "Flat 2, 88 High Street", notes: "Prefers WhatsApp.", notify: "whatsapp", prices: { board: 45, bath: { L: 55 } } },
     { id: "c4", name: "Ben Okafor", email: "ben@example.com", phone: "07700 900104", address: "27 Station Road", notes: "", notify: "sms", prices: { daycare: 30 } },
     { id: "c5", name: "Sofia Ruiz", email: "sofia@example.com", phone: "07700 900105", address: "9 The Green", notes: "", approved: false }
   ];
@@ -767,8 +768,8 @@ function makeSample(t) {
   };
   const rep = (mood, ticks, note, staffId) => ({ mood, ticks, note, staffId, at: "" });
   const bookings = [
-    mk("walk30", "c1", ["p1"], y(0), { slot: WALK_SLOTS[0], staffId: "s1" }),
-    mk("group", "c3", ["p4"], y(0), { slot: WALK_SLOTS[1], staffId: "s1" }),
+    mk("walk60", "c1", ["p1"], y(0), { slot: WALK_SLOTS[0], staffId: "s1" }),
+    mk("walk60", "c3", ["p4"], y(0), { slot: WALK_SLOTS[1], staffId: "s1" }),
     mk("board", "c2", ["p2", "p3"], y(-1), { endDate: y(3), status: "in_progress", staffId: "s1", notes: "Pip's meds in the blue pouch.", addonIds: ["a-eveningwalk", "a-video"] }),
     mk("daycare", "c4", ["p5"], y(0), { staffId: "s1" }),
     mk("fullgroom", "c5", ["p6"], y(1), { slot: "10:30", status: "requested", staffId: "", notes: "Teddy face please" }),
@@ -777,10 +778,10 @@ function makeSample(t) {
     mk("board", "c4", ["p5"], y(6), { endDate: y(8), staffId: "s1" }),
     mk("board", "c5", ["p6"], y(10), { endDate: y(13), status: "requested", notes: "First stay away from home" }),
     mk("bath", "c3", ["p4"], y(3), { slot: "13:30", staffId: "s3", addonIds: ["a-teeth", "a-deshed"] }),
-    mk("walk30", "c1", ["p1"], y(-2), { slot: WALK_SLOTS[0], status: "completed", staffId: "s1", report: rep("Happy", ["Pee", "Poo", "Water"], "Biscuit met a spaniel at the park and played nicely. Muddy paws towelled off.", "s1") }),
+    mk("walk60", "c1", ["p1"], y(-2), { slot: WALK_SLOTS[0], status: "completed", staffId: "s1", report: rep("Happy", ["Pee", "Poo", "Water"], "Biscuit met a spaniel at the park and played nicely. Muddy paws towelled off.", "s1") }),
     mk("bath", "c2", ["p3"], y(-3), { slot: "09:00", status: "completed", paid: true, staffId: "s3", report: rep("Calm", ["Bath", "Nails", "Ears"], "Good boy on the table. Nails were long, trimmed back.", "s3") }),
-    mk("walk30", "c1", ["p1"], y(-4), { slot: WALK_SLOTS[0], status: "completed", paid: true, staffId: "s1", report: rep("Happy", ["Pee", "Water"], "Short loop because of rain.", "s1") }),
-    mk("group", "c3", ["p4"], y(-1), { slot: WALK_SLOTS[1], status: "completed", staffId: "s1", report: rep("Energetic", ["Pee", "Poo", "Played"], "Ran the whole field twice. Recall was excellent.", "s1") }),
+    mk("walk60", "c1", ["p1"], y(-4), { slot: WALK_SLOTS[0], status: "completed", paid: true, staffId: "s1", report: rep("Happy", ["Pee", "Water"], "Short loop because of rain.", "s1") }),
+    mk("walk60", "c3", ["p4"], y(-1), { slot: WALK_SLOTS[1], status: "completed", staffId: "s1", report: rep("Energetic", ["Pee", "Poo", "Played"], "Ran the whole field twice. Recall was excellent.", "s1") }),
     mk("daycare", "c5", ["p6"], y(-2), { status: "completed", paid: true, staffId: "s1", report: rep("Tired", ["Ate", "Water", "Played", "Nap"], "Slept most of the afternoon after a big play session.", "s1") }),
     mk("daycare", "c1", ["p1"], y(4), { status: "declined", decision: { by: "Nicole", at: y(-1) + "T10:00:00", reason: "Fully booked", message: "Daycare is full that day. We have space on the day after if that helps." } })
   ];
@@ -889,6 +890,17 @@ async function firebaseBackend(conf) {
     return { id: "", url: await ST.getDownloadURL(r), contentType: "image/jpeg" };
   } };
   return { db: { doc: docRef, collection: colRef }, assets };
+}
+// Imports a customer list file (customers-import.json, made from Nicole's spreadsheet). The file stays private:
+// customer details are never part of the app's code. Removes the made-up example records and updates the services.
+const OLD_SAMPLE = { clients: /^c[1-5]$/, pets: /^p[1-6]$/, bookings: /^b\d{1,2}$/, messages: /^m[1-3]$/ };
+async function importCustomers(data) {
+  if (!data || !Array.isArray(data.clients) || !Array.isArray(data.pets)) throw new Error("bad file");
+  for (const coll of Object.keys(OLD_SAMPLE)) for (const o of (S[coll] || []).filter(x => OLD_SAMPLE[coll].test(x.id))) await del(coll, o.id);
+  if (S.cfg || S.mode === "live") await putCfg(Object.assign({}, S.cfg || {}, { services: DEFAULT_CFG.services, addons: DEFAULT_CFG.addons }));
+  for (const o of data.clients) await put("clients", o);
+  for (const o of data.pets) await put("pets", o);
+  return data.clients.length;
 }
 async function loadSampleData() {
   const smp = makeSample(todayISO());
@@ -1171,7 +1183,7 @@ function viewHome() {
   const nextGroom = (() => { for (let i = 1; i < 21; i++) { const d = addDays(t, i); for (const sl of GROOM_SLOTS) if (!S.bookings.some(b => ACTIVE.includes(b.status) && b.cat === "groom" && b.date === d && b.slot === sl)) return fmtDate(d) + ", " + sl; } return "Call us"; })();
   const cats = ["walk", "daycare", "boarding", "groom"];
   return '<section class="hero"><div class="wrap"><div><h1>' + esc(c.tagline) + '</h1><p class="lede">Book walks, daycare, overnight stays and grooming online. You get a report card after every visit and can see every booking and invoice in your account.</p><div class="row"><a class="btn primary" href="#book">Book a service</a><a class="btn" href="#portal">Check my bookings</a></div></div>' +
-    '<div class="hero-card"><span class="k">Availability this week</span><div class="slot"><span>Kennel runs free (tightest night)</span><strong class="num">' + Math.max(0, nightsFree) + " of " + c.kennelRuns + '</strong></div><div class="slot"><span>Next grooming slot</span><strong>' + esc(nextGroom) + '</strong></div><div class="slot"><span>Pack walks</span><strong>3 windows daily</strong></div></div></div></section>' +
+    '<div class="hero-card"><span class="k">Availability this week</span><div class="slot"><span>Kennel runs free (tightest night)</span><strong class="num">' + Math.max(0, nightsFree) + " of " + c.kennelRuns + '</strong></div><div class="slot"><span>Next grooming slot</span><strong>' + esc(nextGroom) + '</strong></div><div class="slot"><span>Walks and drop-ins</span><strong>Daily</strong></div></div></div></section>' +
     '<section class="block"><div class="wrap"><h2>Services and prices</h2><p class="muted">' + (S.me && client(S.me) ? "Showing your prices, " + esc(client(S.me).name.split(" ")[0]) + ". " : 'Prices for new customers. Already a customer? <a href="#portal">Sign in</a> to see your own prices. ') + 'Prices are per dog. Grooming is priced by size: small under 10 kg, medium 10 to 25 kg, large over 25 kg.</p>' +
     cats.map(cat => '<h3 style="margin:22px 0 10px" class="row"><span class="cat ' + cat + '"></span>' + CAT_LABEL[cat] + '</h3><div class="svc-grid">' + c.services.filter(s => s.cat === cat).map(s => '<article class="svc ' + s.cat + '"><h4>' + esc(s.name) + '</h4><p class="muted small">' + esc(s.desc) + "</p>" + (addonsFor(c, s.id).length ? '<p class="small"><strong>Add-ons:</strong> <span class="muted">' + esc(addonsFor(c, s.id).map(a => a.name).join(", ")) + "</span></p>" : "") + '<div class="row" style="justify-content:space-between;margin-top:auto"><span class="price num">' + priceText(priceSvc(s)) + (S.me && priceSvc(s).custom ? ' <span class="pill ok">Your rate</span>' : "") + '</span><button class="btn sm" data-act="book-svc" data-id="' + esc(s.id) + '">Book</button></div></article>').join("") + "</div>").join("") +
     '</div></section><section class="block"><div class="wrap"><h2>How booking works</h2><p class="muted">New customers start with a free meet and greet so we can learn your dog\'s routine.</p><ol class="steps"><li><h4>Request online</h4><p class="muted small">Pick a service, dates and your dogs. We check live kennel and grooming availability as you go.</p></li><li><h4>We confirm</h4><p class="muted small">You get a confirmation within a few hours. Recurring walks are booked in one go.</p></li><li><h4>Report card after every visit</h4><p class="muted small">See what they got up to, what they ate and how they were, in your account.</p></li></ol></div></section>' +
@@ -1224,10 +1236,10 @@ const visits = svc && svc.cat === "walk" ? Number(d.repeat || 1) : 1;
   h += '<div class="stepcard"><h3><span class="n">' + (svc ? 4 : 3) + '</span>Your dog' + (S.me ? "s" : " and you") + "</h3>";
   if (S.me) {
     const mine = petsOf(S.me);
-    h += mine.length ? '<div class="choice-grid">' + mine.map(p => { const on = (d.petIds || []).includes(p.id); const vs = vaxState(p, d.date || t); return '<label class="choice' + (on ? " on" : "") + '"><input type="checkbox" data-pet="' + esc(p.id) + '"' + (on ? " checked" : "") + '><span><span class="t">' + esc(p.name) + '</span><span class="s">' + esc(p.breed) + " · " + esc(p.weight) + " kg</span>" + (svc && svc.vax && vs.worst !== "ok" && vs.worst !== "expiring" ? '<span class="pill ' + vs.worst + '" style="margin-top:4px">Vaccines ' + vs.worst + "</span>" : "") + "</span></label>"; }).join("") + "</div>" : '<p class="muted">No dogs on your account yet. Add one in My account.</p>';
+    h += mine.length ? '<div class="choice-grid">' + mine.map(p => { const on = (d.petIds || []).includes(p.id); const vs = vaxState(p, d.date || t); return '<label class="choice' + (on ? " on" : "") + '"><input type="checkbox" data-pet="' + esc(p.id) + '"' + (on ? " checked" : "") + '><span><span class="t">' + esc(p.name) + '</span><span class="s">' + esc(dogSummary(p) || "Dog") + "</span>" + (svc && svc.vax && vs.worst !== "ok" && vs.worst !== "expiring" ? '<span class="pill ' + vs.worst + '" style="margin-top:4px">Vaccines ' + vs.worst + "</span>" : "") + "</span></label>"; }).join("") + "</div>" : '<p class="muted">No dogs on your account yet. Add one in My account.</p>';
   } else {
-    h += '<div class="grid2"><div class="field"><label for="c-name">Your name</label><input type="text" id="c-name" data-d="c_name" value="' + esc(d.c_name || "") + '" autocomplete="name"></div><div class="field"><label for="c-email">Email</label><input type="email" id="c-email" data-d="c_email" value="' + esc(d.c_email || "") + '" autocomplete="email"></div><div class="field"><label for="c-phone">Mobile</label><input type="tel" id="c-phone" data-d="c_phone" value="' + esc(d.c_phone || "") + '" autocomplete="tel"></div><div class="field"><label for="c-addr">Pick-up address</label><input type="text" id="c-addr" data-d="c_address" value="' + esc(d.c_address || "") + '" autocomplete="street-address"></div></div>';
-    h += '<h4 style="margin-top:6px">Your dog</h4><div class="grid3"><div class="field"><label for="p-name">Name</label><input type="text" id="p-name" data-d="p_name" value="' + esc(d.p_name || "") + '"></div><div class="field"><label for="p-breed">Breed</label><input type="text" id="p-breed" data-d="p_breed" value="' + esc(d.p_breed || "") + '"></div><div class="field"><label for="p-weight">Weight (kg)</label><input type="number" id="p-weight" min="1" max="100" data-d="p_weight" data-rr value="' + esc(d.p_weight || "") + '"></div></div>';
+    h += '<div class="grid2"><div class="field"><label for="c-name">Your name</label><input type="text" id="c-name" data-d="c_name" value="' + esc(d.c_name || "") + '" autocomplete="name"></div><div class="field"><label for="c-email">Email</label><input type="email" id="c-email" data-d="c_email" value="' + esc(d.c_email || "") + '" autocomplete="email"></div><div class="field"><label for="c-phone">Mobile number</label><input type="tel" id="c-phone" data-d="c_phone" value="' + esc(d.c_phone || "") + '" autocomplete="tel"></div><div class="field"><label for="c-addr">Pick-up address</label><input type="text" id="c-addr" data-d="c_address" value="' + esc(d.c_address || "") + '" autocomplete="street-address"></div></div>';
+    h += '<h4 style="margin-top:6px">Your dog</h4><p class="small muted">First time with us? These details go on your dog\'s record, so we only ask once.</p>' + dogFields({}, "draft", "p-") + (svc && svc.cat === "groom" ? '<div class="field"><label for="p-weight">Weight (kg)</label><input type="number" id="p-weight" min="1" max="100" data-d="p_weight" data-rr value="' + esc(d.p_weight || "") + '"><span class="hint">Grooming is priced by size.</span></div>' : "");
     if (svc && svc.vax) h += '<p class="small muted">' + esc(svc.name) + ' needs vaccinations valid on the day. Enter each expiry date.</p><div class="grid3">' + VAX.map(([k, l]) => '<div class="field"><label for="p-' + k + '">' + l + ' expires</label><input type="date" id="p-' + k + '" data-d="p_' + k + '" value="' + esc(d["p_" + k] || "") + '"></div>').join("") + "</div>";
   }
   h += '<div class="field"><label for="b-notes">Anything we should know?</label><textarea id="b-notes" data-d="notes" placeholder="Feeding, medication, gate codes, behaviour with other dogs">' + esc(d.notes || "") + "</textarea></div></div>";
@@ -1267,7 +1279,9 @@ async function submitBooking() {
     if (!d.c_email || !/^\S+@\S+\.\S+$/.test(d.c_email)) errs.push("Add a valid email so you can sign in later.");
     if (!d.c_phone) errs.push("Add a mobile number.");
     if (!d.p_name) errs.push("Add your dog's name.");
-    if (!d.p_weight) errs.push("Add your dog's weight.");
+    if (!d.p_sex || !d.p_breed || !d.p_age || !d.p_neutered) errs.push("Add your dog's breed, sex, age and whether they're neutered.");
+    if (!d.p_vet) errs.push("Add your vet's name and address.");
+    if (svc && svc.cat === "groom" && !d.p_weight) errs.push("Add your dog's weight so we can price the groom.");
   }
   if (svc) {
     const av = availability(c, S.bookings, svc, d, S.me ? pets.length : 1);
@@ -1286,7 +1300,7 @@ async function submitBooking() {
       const existing = S.clients.find(x => (x.email || "").toLowerCase() === d.c_email.trim().toLowerCase());
       if (existing) cid = existing.id;
       else { cid = uid("c"); await put("clients", { id: cid, name: d.c_name.trim(), email: d.c_email.trim(), phone: d.c_phone || "", address: d.c_address || "", notes: "", approved: false, createdAt: new Date().toISOString() }); }
-      const np = { id: uid("p"), clientId: cid, name: d.p_name.trim(), breed: d.p_breed || "", weight: Number(d.p_weight) || 0, born: "", sex: "", vet: "", feeding: "", temperament: "", vax: { rabies: d.p_rabies || "", dhpp: d.p_dhpp || "", bordetella: d.p_bordetella || "" } };
+      const np = { id: uid("p"), clientId: cid, name: d.p_name.trim(), breed: d.p_breed || "", weight: Number(d.p_weight) || 0, sex: d.p_sex || "", age: d.p_age || "", neutered: d.p_neutered || "", microchip: d.p_microchip || "", vet: d.p_vet || "", notes: d.p_notes || "", feeding: "", temperament: "", vax: { rabies: d.p_rabies || "", dhpp: d.p_dhpp || "", bordetella: d.p_bordetella || "" } };
       await put("pets", np); pets = [np];
     }
     const reps = svc.cat === "walk" ? Math.max(1, Number(d.repeat) || 1) : 1;
@@ -1423,9 +1437,22 @@ function vaxPills(p, onDate) {
   const vs = vaxState(p, onDate);
   return '<div class="row" style="gap:6px">' + VAX.map(([k, l]) => '<span class="pill ' + vs.detail[k] + '" title="' + esc(p.vax && p.vax[k] ? "Expires " + fmtDate(p.vax[k], { day: "numeric", month: "short", year: "numeric" }) : "No date on file") + '">' + esc(l) + (vs.detail[k] === "ok" ? "" : ": " + vs.detail[k]) + "</span>").join("") + "</div>";
 }
+// Dog details, as on the New Customer Form. bind "draft" writes to S.draft (p_*), "form" uses name= for FormData (dog_*)
+function dogFields(v, bind, idp) {
+  v = v || {}; const draft = bind === "draft";
+  const at = k => draft ? ' data-d="p_' + k + '"' : ' name="dog_' + k + '"';
+  const val = k => esc(draft ? (S.draft["p_" + k] || "") : (v[k] || ""));
+  const radio = (k, label, opts) => '<div class="field"><span class="flabel" id="' + idp + k + '-l">' + label + '</span><div class="checks" role="radiogroup" aria-labelledby="' + idp + k + '-l" style="margin-top:6px">' + opts.map(([ov, ol]) => '<label><input type="radio"' + at(k) + ' value="' + ov + '"' + ((draft ? S.draft["p_" + k] : v[k]) === ov ? " checked" : "") + ">" + ol + "</label>").join("") + "</div></div>";
+  const txt = (k, label, type, extra) => '<div class="field"><label for="' + idp + k + '">' + label + '</label><input type="' + (type || "text") + '" id="' + idp + k + '"' + at(k) + (extra || "") + ' value="' + val(k) + '"></div>';
+  return '<div class="grid2">' + txt("name", "Dog name", "text", draft ? "" : " required") + txt("breed", "Dog breed") + radio("sex", "Dog sex", [["Male", "Male"], ["Female", "Female"]]) + txt("age", "Dog age", "text", ' placeholder="e.g. 4 years"') + radio("neutered", "Dog neutered", [["Yes", "Yes"], ["No", "No"]]) + txt("microchip", "Dog microchip number", "text", ' inputmode="numeric"') + "</div>" +
+    '<div class="field"><label for="' + idp + 'vet">Vet name and address</label><textarea id="' + idp + 'vet"' + at("vet") + ' rows="2">' + val("vet") + "</textarea></div>" +
+    '<div class="field"><label for="' + idp + 'notes">Additional notes <span class="muted small">(optional)</span></label><textarea id="' + idp + 'notes"' + at("notes") + ' rows="2" placeholder="Feeding, medication, behaviour with other dogs">' + val("notes") + "</textarea></div>";
+}
+function dogFromForm(fd) { const g = k => String(fd.get("dog_" + k) || "").trim(); return { name: g("name"), breed: g("breed"), sex: g("sex"), age: g("age"), neutered: g("neutered"), microchip: g("microchip"), vet: g("vet"), notes: g("notes") }; }
+function dogSummary(p) { return [p.breed, p.age, p.sex, p.neutered === "Yes" ? "neutered" : p.neutered === "No" ? "not neutered" : "", p.weight ? p.weight + " kg" : ""].filter(Boolean).join(" · "); }
 function petCard(p, t, admin) {
-  return '<div class="pet"><div class="row" style="justify-content:space-between"><div><strong>' + esc(p.name) + '</strong> <span class="muted small">' + esc(p.breed) + " · " + esc(p.weight) + " kg · size " + sizeOf(p) + '</span></div><div class="row">' + (admin ? '<button class="btn sm sun" data-act="msg-to" data-client="' + esc(p.clientId) + '" data-pets="' + esc(p.id) + '">Message</button>' : "") + '<button class="btn sm ghost" data-act="pet-edit" data-id="' + esc(p.id) + '">Edit</button></div></div>' + vaxPills(p, t) + flagChips([p]) +
-    (admin ? '<dl class="kv"><dt>Born</dt><dd>' + esc(p.born || "–") + "</dd><dt>Sex</dt><dd>" + esc(p.sex || "–") + "</dd><dt>Vet</dt><dd>" + esc(p.vet || "–") + "</dd><dt>Feeding</dt><dd>" + esc(p.feeding || "–") + "</dd><dt>Behaviour</dt><dd>" + esc(p.temperament || "–") + "</dd></dl>" : (p.feeding ? '<p class="small muted">Feeding: ' + esc(p.feeding) + "</p>" : "")) + "</div>";
+  return '<div class="pet"><div class="row" style="justify-content:space-between"><div><strong>' + esc(p.name) + '</strong> <span class="muted small">' + esc(dogSummary(p)) + '</span></div><div class="row">' + (admin ? '<button class="btn sm sun" data-act="msg-to" data-client="' + esc(p.clientId) + '" data-pets="' + esc(p.id) + '">Message</button>' : "") + '<button class="btn sm ghost" data-act="pet-edit" data-id="' + esc(p.id) + '">Edit</button></div></div>' + vaxPills(p, t) + flagChips([p]) +
+    (admin ? '<dl class="kv"><dt>Age</dt><dd>' + esc(p.age || p.born || "–") + "</dd><dt>Sex</dt><dd>" + esc(p.sex || "–") + "</dd><dt>Neutered</dt><dd>" + esc(p.neutered || "–") + "</dd><dt>Microchip</dt><dd>" + esc(p.microchip || "–") + "</dd><dt>Vet</dt><dd>" + esc(p.vet || "–") + "</dd>" + (p.notes ? "<dt>Notes</dt><dd>" + esc(p.notes) + "</dd>" : "") + "<dt>Feeding</dt><dd>" + esc(p.feeding || "–") + "</dd><dt>Behaviour</dt><dd>" + esc(p.temperament || "–") + "</dd></dl>" : (p.feeding ? '<p class="small muted">Feeding: ' + esc(p.feeding) + "</p>" : "")) + "</div>";
 }
 
 // ----- admin -----
@@ -1635,7 +1662,7 @@ function adminClients() {
   const q = S.cQuery.toLowerCase(); const t = todayISO();
   const list = S.clients.filter(c => !q || (c.name + " " + c.email + " " + petsOf(c.id).map(p => p.name).join(" ")).toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
   const sel = client(S.cSel) || list[0];
-  let h = '<div class="head"><div><h2>Clients and dogs</h2><p class="muted">' + S.clients.length + " households, " + S.pets.length + ' dogs.</p></div><button class="btn primary" data-act="client-new">Add client</button></div>';
+  let h = '<div class="head"><div><h2>Customers and pets</h2><p class="muted">' + S.clients.length + " customers, " + S.pets.length + ' pets.</p></div><button class="btn primary" data-act="client-new">Add customer</button></div>';
   h += '<div class="client-grid"><div class="card" style="padding:10px"><input type="search" id="c-search" data-q="1" placeholder="Search name, email or dog" aria-label="Search clients" value="' + esc(S.cQuery) + '" style="margin-bottom:8px"><div class="client-list">' + (list.map(c => '<button data-act="csel" data-id="' + esc(c.id) + '"' + (sel && sel.id === c.id ? ' aria-current="true"' : "") + '><span><strong>' + esc(c.name) + '</strong><br><span class="small muted">' + esc(petsOf(c.id).map(p => p.name).join(", ") || "No dogs") + '</span><span class="row" style="gap:4px;margin-top:4px">' + (c.approved === false ? '<span class="pill requested">New</span>' : "") + (hasCustom(c) ? '<span class="pill confirmed">Custom prices</span>' : "") + (c.active === false ? '<span class="pill cancelled">Inactive</span>' : "") + (S.bookings.some(b => b.clientId === c.id && b.status === "completed" && !b.paid) ? '<span class="pill unpaid">Owes</span>' : "") + "</span></span></button>").join("") || '<p class="muted small" style="padding:8px">No matches.</p>') + "</div></div>";
   if (!sel) return h + '<div class="empty">No clients yet. They appear here when someone books.</div></div>';
   const hist = S.bookings.filter(b => b.clientId === sel.id).sort((a, b) => b.date.localeCompare(a.date));
@@ -1686,7 +1713,8 @@ function adminSettings() {
   let h = '<div class="head"><div><h2>Settings</h2><p class="muted">One section at a time. Press Save when you\'re done.</p></div></div>';
   h += '<div class="subnav" role="tablist" aria-label="Settings sections">' + SET_SECS.map(([k, l]) => '<button type="button" role="tab" data-act="settab" data-id="' + k + '"' + (sec === k ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + ">" + l + "</button>").join("") + "</div>";
   h += '<form class="stack" data-form="settings">';
-  if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the sample customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load sample data</button></div></div>';
+  h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
+  if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
   h += part("business", "Business", "How you appear on the booking site.", '<div class="grid2"><div class="field"><label for="s-name">Business name</label><input type="text" id="s-name" name="businessName" value="' + esc(c.businessName) + '"></div><div class="field"><label for="s-area">Area served</label><input type="text" id="s-area" name="area" value="' + esc(c.area) + '"></div><div class="field" style="grid-column:1/-1"><label for="s-tag">Headline on the booking site</label><input type="text" id="s-tag" name="tagline" value="' + esc(c.tagline) + '"></div><div class="field"><label for="s-phone">Phone</label><input type="text" id="s-phone" name="phone" value="' + esc(c.phone) + '"></div><div class="field"><label for="s-email">Email</label><input type="text" id="s-email" name="email" value="' + esc(c.email) + '"></div><div class="field"><label for="s-cur">Currency symbol</label><input type="text" id="s-cur" name="currency" maxlength="3" value="' + esc(c.currency) + "\"></div></div>");
   h += part("hours", "Days and limits", "Protect your time. Customers can\'t book days off, or past a person\'s daily limit.",
     '<div class="field"><label for="s-dayoff">Days off</label><div class="row"><input type="date" id="s-dayoff" style="max-width:220px"><button class="btn" type="button" data-act="dayoff-add">Add day off</button></div><input type="hidden" id="s-daysoff" name="daysOff" value="' + esc((c.daysOff || []).join(",")) + '"><div id="daysoff-list" class="flags-row" style="margin-top:8px">' + ((c.daysOff || []).length ? c.daysOff.map(d0 => '<span class="flag">' + esc(fmtDate(d0, { weekday: "short", day: "numeric", month: "short", year: "numeric" })) + ' <button type="button" class="linkbtn" data-act="dayoff-rm" data-id="' + esc(d0) + '" aria-label="Remove ' + esc(d0) + '">×</button></span>').join("") : '<span class="small muted">No days off set.</span>') + '</div></div>' +
@@ -1715,10 +1743,10 @@ function viewModal() {
     inner = '<form class="stack" data-form="report"><h3>Report card for ' + esc(petNames(b)) + '</h3><p class="small muted">' + esc((svcById(b.serviceId) || {}).name || "") + " · " + esc(when(b)) + '. The client sees this in their account.</p><div class="field"><span class="small" style="font-weight:600">What happened</span><div class="checks">' + opts.map(o => '<label><input type="checkbox" name="tick" value="' + o + '"' + (["Pee", "Water"].includes(o) ? " checked" : "") + ">" + o + "</label>").join("") + '</div></div><div class="grid2"><div class="field"><label for="r-mood">Mood</label><select id="r-mood" name="mood">' + ["Happy", "Energetic", "Calm", "Tired", "Anxious"].map(x => "<option>" + x + "</option>").join("") + '</select></div><div class="field"><label for="r-staff">Completed by</label><select id="r-staff" name="staffId">' + C().staff.map(s => '<option value="' + esc(s.id) + '"' + (b.staffId === s.id ? " selected" : "") + ">" + esc(s.name) + "</option>").join("") + '</select></div></div><div class="field"><label for="r-note">Note for the owner</label><textarea id="r-note" name="note" placeholder="How the visit went"></textarea></div><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Complete and send</button></div></form>';
   } else if (m.type === "pet") {
     const p = m.id ? pet(m.id) : { clientId: m.client, vax: {} };
-    inner = '<form class="stack" data-form="pet"><h3>' + (m.id ? "Edit " + esc(p.name) : "Add a dog") + '</h3><div class="grid3"><div class="field"><label for="pe-name">Name</label><input type="text" id="pe-name" name="name" required value="' + esc(p.name || "") + '"></div><div class="field"><label for="pe-breed">Breed</label><input type="text" id="pe-breed" name="breed" value="' + esc(p.breed || "") + '"></div><div class="field"><label for="pe-w">Weight (kg)</label><input type="number" id="pe-w" name="weight" min="1" max="100" required value="' + esc(p.weight || "") + '"></div><div class="field"><label for="pe-born">Year born</label><input type="text" id="pe-born" name="born" value="' + esc(p.born || "") + '"></div><div class="field"><label for="pe-sex">Sex</label><input type="text" id="pe-sex" name="sex" value="' + esc(p.sex || "") + '"></div><div class="field"><label for="pe-vet">Vet</label><input type="text" id="pe-vet" name="vet" value="' + esc(p.vet || "") + '"></div></div><div class="field"><label for="pe-feed">Feeding</label><input type="text" id="pe-feed" name="feeding" value="' + esc(p.feeding || "") + '"></div><div class="field"><label for="pe-temp">Behaviour and handling</label><input type="text" id="pe-temp" name="temperament" value="' + esc(p.temperament || "") + '"></div><div class="field"><span class="small" style="font-weight:600">Must-know flags</span><span class="hint">Shown on every visit card so nobody has to remember them.</span><div class="checks" style="margin-top:6px">' + FLAGS.map(([k, l]) => '<label><input type="checkbox" name="flag" value="' + k + '"' + ((p.flags || []).includes(k) ? " checked" : "") + ">" + esc(l) + "</label>").join("") + '</div></div><h4>Vaccination expiry dates</h4><div class="grid3">' + VAX.map(([k, l]) => '<div class="field"><label for="pe-' + k + '">' + l + '</label><input type="date" id="pe-' + k + '" name="vax_' + k + '" value="' + esc((p.vax || {})[k] || "") + '"></div>').join("") + '</div><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Save dog</button></div></form>';
+    inner = '<form class="stack" data-form="pet"><h3>' + (m.id ? "Edit " + esc(p.name) : "Add a dog") + '</h3>' + dogFields(p, "form", "pe-") + '<div class="field"><label for="pe-w">Weight (kg) <span class="muted small">(sets the grooming size)</span></label><input type="number" id="pe-w" name="weight" min="1" max="100" value="' + esc(p.weight || "") + '"></div><div class="field"><label for="pe-feed">Feeding</label><input type="text" id="pe-feed" name="feeding" value="' + esc(p.feeding || "") + '"></div><div class="field"><label for="pe-temp">Behaviour and handling</label><input type="text" id="pe-temp" name="temperament" value="' + esc(p.temperament || "") + '"></div><div class="field"><span class="small" style="font-weight:600">Must-know flags</span><span class="hint">Shown on every visit card so nobody has to remember them.</span><div class="checks" style="margin-top:6px">' + FLAGS.map(([k, l]) => '<label><input type="checkbox" name="flag" value="' + k + '"' + ((p.flags || []).includes(k) ? " checked" : "") + ">" + esc(l) + "</label>").join("") + '</div></div><h4>Vaccination expiry dates</h4><div class="grid3">' + VAX.map(([k, l]) => '<div class="field"><label for="pe-' + k + '">' + l + '</label><input type="date" id="pe-' + k + '" name="vax_' + k + '" value="' + esc((p.vax || {})[k] || "") + '"></div>').join("") + '</div><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Save dog</button></div></form>';
   } else if (m.type === "client") {
     const cl = m.id ? client(m.id) : {};
-    inner = '<form class="stack" data-form="client"><h3>' + (m.id ? "Edit client" : "Add client") + '</h3><div class="grid2"><div class="field"><label for="ce-name">Name</label><input type="text" id="ce-name" name="name" required value="' + esc(cl.name || "") + '"></div><div class="field"><label for="ce-email">Email</label><input type="email" id="ce-email" name="email" required value="' + esc(cl.email || "") + '"></div><div class="field"><label for="ce-phone">Mobile</label><input type="tel" id="ce-phone" name="phone" value="' + esc(cl.phone || "") + '"></div><div class="field"><label for="ce-addr">Address</label><input type="text" id="ce-addr" name="address" value="' + esc(cl.address || "") + '"></div></div><div class="field"><label for="ce-notes">Notes (keys, access, preferences)</label><textarea id="ce-notes" name="notes">' + esc(cl.notes || "") + '</textarea></div><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Save client</button></div></form>';
+    inner = !m.id ? '<form class="stack" data-form="client"><div><h3>New customer</h3><p class="small muted">Please complete all fields below. Only the customer and dog names are needed to save.</p></div><h4>Customer details</h4><div class="grid2"><div class="field"><label for="nc-name">Customer name</label><input type="text" id="nc-name" name="name" required autocomplete="off"></div><div class="field"><label for="nc-email">Customer email</label><input type="email" id="nc-email" name="email" autocomplete="off"></div><div class="field"><label for="nc-phone">Customer number</label><input type="tel" id="nc-phone" name="phone" autocomplete="off"></div><div class="field"><label for="nc-addr">Address <span class="muted small">(optional)</span></label><input type="text" id="nc-addr" name="address" autocomplete="off"></div></div><h4>Dog details</h4>' + dogFields({}, "form", "nc-") + '<p class="small muted">Please make sure all information is accurate. You can add more dogs and set prices after saving.</p><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Save customer</button></div></form>' : '<form class="stack" data-form="client"><h3>' + (m.id ? "Edit client" : "Add client") + '</h3><div class="grid2"><div class="field"><label for="ce-name">Name</label><input type="text" id="ce-name" name="name" required value="' + esc(cl.name || "") + '"></div><div class="field"><label for="ce-email">Email</label><input type="email" id="ce-email" name="email" required value="' + esc(cl.email || "") + '"></div><div class="field"><label for="ce-phone">Mobile</label><input type="tel" id="ce-phone" name="phone" value="' + esc(cl.phone || "") + '"></div><div class="field"><label for="ce-addr">Address</label><input type="text" id="ce-addr" name="address" value="' + esc(cl.address || "") + '"></div></div><div class="field"><label for="ce-notes">Notes (keys, access, preferences)</label><textarea id="ce-notes" name="notes">' + esc(cl.notes || "") + '</textarea></div><div class="row end"><button class="btn" type="button" data-act="close">Cancel</button><button class="btn primary" type="submit">Save client</button></div></form>';
   } else if (m.type === "ios-install") {
     inner = '<div class="stack"><h3>Add to your home screen</h3><ol class="steps-ios"><li>Tap the <strong>Share</strong> button in Safari (the square with an arrow pointing up).</li><li>Scroll down and tap <strong>Add to Home Screen</strong>.</li><li>Tap <strong>Add</strong>. The app appears on your home screen.</li></ol><p class="small muted">On iPhone this only works in Safari.</p><div class="row end"><button class="btn primary" type="button" data-act="close">Got it</button></div></div>';
   } else if (m.type === "comfort") {
@@ -1786,7 +1814,7 @@ async function handleClick(e) {
     case "install": if (installEvt) { installEvt.prompt(); try { await installEvt.userChoice; } catch (er) {} installEvt = null; render(); } else S.modal = { type: "ios-install" }, render(); break;
     case "install-later": try { localStorage.setItem("dogco-install-later", todayISO()); } catch (er) {} render(); break;
     case "sw-update": if (S.swWaiting) S.swWaiting.postMessage("SKIP_WAITING"); break;
-    case "load-sample": beginUndo(); try { await loadSampleData(); toast("Sample data loaded"); } finally { endUndo(); } break;
+    case "load-sample": beginUndo(); try { await loadSampleData(); toast("Example data loaded"); } finally { endUndo(); } break;
     case "nums": S.showNums = !S.showNums; try { localStorage.setItem("dogco-nums", S.showNums ? "1" : ""); } catch (er) {} render(); break;
     case "undo": await runUndo(); break;
     case "comfort-open": S.modal = { type: "comfort" }; render(); break;
@@ -1842,6 +1870,12 @@ document.addEventListener("change", async (e) => {
     render(); return;
   }
   if (el.dataset.comfort) { setComfort(el.dataset.comfort, el.checked); return; }
+  if (el.dataset.change === "import-file") {
+    const f = el.files && el.files[0]; if (!f) return;
+    try { const n = await importCustomers(JSON.parse(await f.text())); toast("Imported " + n + " customers"); }
+    catch (e) { toast("That file couldn't be imported. Choose customers-import.json."); }
+    el.value = ""; return;
+  }
   if (el.dataset.change === "thread") { if (el.value) openThread(el.value); return; }
   if (el.dataset.change === "as") { S.staffId = el.value; return; }
   if (el.dataset.change === "assign") { beginUndo(); try { await patchBooking(el.dataset.id, { staffId: el.value }); toast(el.value ? "Assigned to " + staffName(el.value) : "Unassigned"); } finally { endUndo(); } return; }
@@ -1913,13 +1947,16 @@ async function handleSubmit(e) {
   }
   if (kind === "pet") {
     const m = S.modal; const base = m.id ? pet(m.id) : { id: uid("p"), clientId: m.client };
-    const p = Object.assign({}, base, { name: String(fd.get("name")).trim(), breed: fd.get("breed"), weight: Number(fd.get("weight")) || 0, born: fd.get("born"), sex: fd.get("sex"), vet: fd.get("vet"), feeding: fd.get("feeding"), temperament: fd.get("temperament"), flags: fd.getAll("flag"), vax: { rabies: fd.get("vax_rabies") || "", dhpp: fd.get("vax_dhpp") || "", bordetella: fd.get("vax_bordetella") || "" } });
+    const p = Object.assign({}, base, dogFromForm(fd), { weight: Number(fd.get("weight")) || 0, feeding: fd.get("feeding"), temperament: fd.get("temperament"), flags: fd.getAll("flag"), vax: { rabies: fd.get("vax_rabies") || "", dhpp: fd.get("vax_dhpp") || "", bordetella: fd.get("vax_bordetella") || "" } });
     S.modal = null; await put("pets", p); toast("Saved " + p.name); return;
   }
   if (kind === "client") {
     const m = S.modal; const base = m.id ? client(m.id) : { id: uid("c"), approved: true, createdAt: new Date().toISOString() };
-    const cl = Object.assign({}, base, { name: String(fd.get("name")).trim(), email: String(fd.get("email")).trim(), phone: fd.get("phone"), address: fd.get("address"), notes: fd.get("notes") });
-    S.modal = null; S.cSel = cl.id; await put("clients", cl); toast("Saved " + cl.name); return;
+    const cl = Object.assign({}, base, { name: String(fd.get("name")).trim(), email: String(fd.get("email") || "").trim().toLowerCase(), phone: fd.get("phone") || "", address: fd.get("address") || "", notes: m.id ? fd.get("notes") : (base.notes || "") });
+    if (!m.id && cl.email && S.clients.some(c => (c.email || "").toLowerCase() === cl.email)) { toast("A customer with that email already exists."); return; }
+    S.modal = null; S.cSel = cl.id; S.adminTab = "clients";
+    if (!m.id) { cl.prices = {}; cl.source = "form"; await put("clients", cl); const dog = dogFromForm(fd); if (dog.name) await put("pets", Object.assign({ id: uid("p"), clientId: cl.id, weight: 0, feeding: "", temperament: "", flags: [], vax: {} }, dog)); toast("Added " + cl.name + (dog.name ? " and " + dog.name : "")); return; }
+    await put("clients", cl); toast("Saved " + cl.name); return;
   }
   if (kind === "newbooking") {
     const svc = svcById(fd.get("serviceId")); const cid = fd.get("clientId"); const pets = petsOf(cid);
