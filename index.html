@@ -284,6 +284,13 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
 .client-list button:hover{background:var(--surface-2)}
 .client-list button[aria-current="true"]{background:var(--surface-2);box-shadow:inset 3px 0 0 var(--accent)}
 .client-list button:focus-visible{outline:3px solid var(--sun)}
+.cfind{margin-bottom:14px;display:flex;flex-direction:column;gap:6px}
+.cfind input{font-size:1rem}
+.cmatches{border-top:1px solid var(--line);margin-top:6px;padding-top:6px}
+.client-list button{align-items:center}
+.cl-main{display:flex;flex-direction:column;min-width:0}
+.cl-main strong,.cl-pets{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
 .pet{border:1px solid var(--line);border-radius:10px;padding:14px;display:flex;flex-direction:column;gap:8px}
 .kv{display:grid;grid-template-columns:120px 1fr;gap:4px 12px;font-size:.9rem}
 .kv dt{color:var(--muted)}
@@ -1658,13 +1665,24 @@ function adminKennel() {
   h += '<tr><td class="name"><strong>Runs used</strong></td>' + days.map(d => { const conf = stays.filter(b => occupiesNight(b, d)).reduce((s, b) => s + (b.petIds || []).length, 0); const req = S.bookings.filter(b => b.status === "requested" && occupiesNight(b, d)).reduce((s, b) => s + (b.petIds || []).length, 0); return '<td class="occ num' + (conf >= c.kennelRuns ? " full" : "") + (d === t ? " today" : "") + '">' + conf + (req ? '<span class="muted">+' + req + "</span>" : "") + "</td>"; }).join("") + "</tr></tbody></table></div>";
   return h;
 }
+function digits(v) { let d = String(v || "").replace(/\D/g, ""); if (d.startsWith("44")) d = "0" + d.slice(2); return d; }
+function clientMatches(c, q) {
+  if (!q) return true;
+  const hay = (c.name + " " + (c.email || "") + " " + petsOf(c.id).map(p => p.name).join(" ")).toLowerCase();
+  if (hay.includes(q)) return true;
+  const qd = digits(q); return qd.length >= 3 && digits(c.phone).includes(qd);
+}
 function adminClients() {
-  const q = S.cQuery.toLowerCase(); const t = todayISO();
-  const list = S.clients.filter(c => !q || (c.name + " " + c.email + " " + petsOf(c.id).map(p => p.name).join(" ")).toLowerCase().includes(q)).sort((a, b) => a.name.localeCompare(b.name));
-  const sel = client(S.cSel) || list[0];
-  let h = '<div class="head"><div><h2>Customers and pets</h2><p class="muted">' + S.clients.length + " customers, " + S.pets.length + ' pets.</p></div><button class="btn primary" data-act="client-new">Add customer</button></div>';
-  h += '<div class="client-grid"><div class="card" style="padding:10px"><input type="search" id="c-search" data-q="1" placeholder="Search name, email or dog" aria-label="Search clients" value="' + esc(S.cQuery) + '" style="margin-bottom:8px"><div class="client-list">' + (list.map(c => '<button data-act="csel" data-id="' + esc(c.id) + '"' + (sel && sel.id === c.id ? ' aria-current="true"' : "") + '><span><strong>' + esc(c.name) + '</strong><br><span class="small muted">' + esc(petsOf(c.id).map(p => p.name).join(", ") || "No dogs") + '</span><span class="row" style="gap:4px;margin-top:4px">' + (c.approved === false ? '<span class="pill requested">New</span>' : "") + (hasCustom(c) ? '<span class="pill confirmed">Custom prices</span>' : "") + (c.active === false ? '<span class="pill cancelled">Inactive</span>' : "") + (S.bookings.some(b => b.clientId === c.id && b.status === "completed" && !b.paid) ? '<span class="pill unpaid">Owes</span>' : "") + "</span></span></button>").join("") || '<p class="muted small" style="padding:8px">No matches.</p>') + "</div></div>";
-  if (!sel) return h + '<div class="empty">No clients yet. They appear here when someone books.</div></div>';
+  const q = S.cQuery.trim().toLowerCase(); const t = todayISO();
+  const list = S.clients.filter(c => clientMatches(c, q)).sort((a, b) => a.name.localeCompare(b.name));
+  const sel = q ? (list.find(c => c.id === S.cSel) || list[0]) : client(S.cSel);
+  const owes = c => S.bookings.some(b => b.clientId === c.id && b.status === "completed" && !b.paid);
+  let h = '<div class="head"><div><h2>Customers</h2><p class="muted">' + S.clients.length + " customers, " + S.pets.length + ' pets.</p></div><button class="btn primary" data-act="client-new">Add customer</button></div>';
+  const MAX = 8; const shown = list.slice(0, MAX);
+  h += '<div class="card cfind"><label for="c-search">Find a customer</label><input type="search" id="c-search" data-q="1" placeholder="Name, email, dog or phone number" autocomplete="off" value="' + esc(S.cQuery) + '">' +
+    (q ? (list.length ? '<div class="client-list cmatches" role="list">' + shown.map(c => '<button role="listitem" data-act="csel" data-id="' + esc(c.id) + '"' + (sel && sel.id === c.id ? ' aria-current="true"' : "") + '><span class="cl-main"><strong>' + esc(c.name) + '</strong><span class="small muted cl-pets">' + esc([petsOf(c.id).map(p => p.name).join(", "), c.phone].filter(Boolean).join(" · ") || "No pets") + "</span></span>" + (c.approved === false ? '<span class="pill requested">New</span>' : owes(c) ? '<span class="pill unpaid">Owes</span>' : "") + "</button>").join("") + "</div>" + (list.length > MAX ? '<p class="small muted">' + (list.length - MAX) + " more. Keep typing to narrow it down.</p>" : "") : '<p class="small muted" role="status">No matches. Try part of a name, a dog\'s name or the last few digits of a phone number.</p>') : "") + "</div>";
+  h += '<div class="cdetail">';
+  if (!sel) return h + '<div class="empty">' + (S.clients.length ? "Search above to open a customer's details." : "No customers yet. Add one, or they appear here when someone books.") + "</div></div>";
   const hist = S.bookings.filter(b => b.clientId === sel.id).sort((a, b) => b.date.localeCompare(a.date));
   const owed = hist.filter(b => b.status === "completed" && !b.paid).reduce((s, b) => s + (b.price || 0), 0);
   const spent = hist.filter(b => b.status === "completed").reduce((s, b) => s + (b.price || 0), 0);
