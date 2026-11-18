@@ -1,10 +1,124 @@
 rules_version = '2';
-// TESTING ONLY. Anyone with the link can read and write until the date below.
-// Do not enter real customer details until phase 2 (logins) replaces these rules.
+
+// ALL4PAWS security rules.
+// Staff: anyone whose verified email is listed in config/admins. Staff can read and change everything.
+// Customers: signed in, and linked to one record in /clients through its uid field. They can only read and write
+// their own record, dogs, bookings and messages, within the limits below.
+// Everyone: can read the business settings (services, prices, opening rules) and /busy, which holds each booking's
+// dates and size but no names, dogs or addresses, so the booking page can check availability.
 service cloud.firestore {
   match /databases/{database}/documents {
-    match /{document=**} {
-      allow read, write: if request.time < timestamp.date(2026, 12, 7);
+
+    function signedIn() { return request.auth != null; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    function isAdmin() {
+      return verified()
+        && exists(/databases/$(database)/documents/config/admins)
+        && myEmail() in get(/databases/$(database)/documents/config/admins).data.emails;
     }
+    // The signed-in person owns the customer record with this id
+    function ownsClient(cid) {
+      return signedIn() && cid is string
+        && get(/databases/$(database)/documents/clients/$(cid)).data.get('uid', '') == request.auth.uid;
+    }
+    function changes() { return request.resource.data.diff(resource.data).affectedKeys(); }
+
+    match /config/main {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /config/admins {
+      allow read: if verified() && myEmail() in resource.data.emails;
+      allow write: if isAdmin();
+    }
+
+    match /busy/{id} {
+      allow read: if true;
+      allow create, update: if isAdmin() || (
+        ownsClient(get(/databases/$(database)/documents/bookings/$(id)).data.clientId)
+        && request.resource.data.keys().hasOnly(['date', 'endDate', 'cat', 'slot', 'serviceId', 'status', 'petCount'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /clients/{cid} {
+      allow read: if isAdmin()
+        || (signedIn() && resource.data.get('uid', '') == request.auth.uid)
+        || (verified() && resource.data.get('email', '') == myEmail());
+
+      // New customer sets up their own record: no prices, not yet approved
+      allow create: if isAdmin() || (
+        verified()
+        && request.resource.data.uid == request.auth.uid
+        && request.resource.data.email == myEmail()
+        && request.resource.data.approved == false
+        && request.resource.data.prices.size() == 0
+        && request.resource.data.keys().hasOnly(['uid', 'email', 'name', 'phone', 'address', 'notes', 'approved', 'prices', 'source', 'createdAt'])
+      );
+
+      allow update: if isAdmin()
+        // Existing customer links their account the first time they sign in with the email Nicole has for them
+        || (verified()
+            && resource.data.get('uid', null) == null
+            && resource.data.get('email', '') == myEmail()
+            && changes().hasOnly(['uid'])
+            && request.resource.data.uid == request.auth.uid)
+        // Customers can update their own contact details, nothing else (not prices, approval or notes)
+        || (signedIn()
+            && resource.data.get('uid', '') == request.auth.uid
+            && changes().hasOnly(['name', 'phone', 'address']));
+
+      allow delete: if isAdmin();
+    }
+
+    match /pets/{id} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      allow create: if isAdmin() || ownsClient(request.resource.data.clientId);
+      allow update: if isAdmin() || (
+        ownsClient(resource.data.clientId)
+        && request.resource.data.clientId == resource.data.clientId
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /bookings/{id} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      // Customers can request bookings for themselves; they can't mark anything paid or completed
+      allow create: if isAdmin() || (
+        ownsClient(request.resource.data.clientId)
+        && request.resource.data.status in ['requested', 'confirmed']
+        && request.resource.data.get('paid', false) == false
+      );
+      // Customers can only cancel their own booking
+      allow update: if isAdmin() || (
+        ownsClient(resource.data.clientId)
+        && changes().hasOnly(['status'])
+        && request.resource.data.status == 'cancelled'
+      );
+      allow delete: if isAdmin();
+    }
+
+    match /messages/{id} {
+      allow read: if isAdmin() || ownsClient(resource.data.clientId);
+      allow create: if isAdmin() || (
+        ownsClient(request.resource.data.clientId)
+        && request.resource.data.from == 'client'
+      );
+      // Customers can only mark the team's messages as read
+      allow update: if isAdmin() || (
+        ownsClient(resource.data.clientId)
+        && changes().hasOnly(['readByClient'])
+      );
+      allow delete: if isAdmin();
+    }
+
+    // Back office only
+    match /updates/{id} { allow read, write: if isAdmin(); }
+    match /days/{id} { allow read, write: if isAdmin(); }
+
+    // Anything else: no access
+    match /{document=**} { allow read, write: if false; }
   }
 }
