@@ -1,8 +1,8 @@
 {
   "id": "./",
-  "name": "ALL4PAWZ",
-  "short_name": "ALL4PAWZ",
-  "description": "Book walks, daycare, overnight stays, drop-ins and grooming with ALL4PAWZ.",
+  "name": "ALL4PAWS",
+  "short_name": "ALL4PAWS",
+  "description": "Book walks, daycare, overnight stays, drop-ins and grooming with ALL4PAWS.",
   "start_url": "./?source=app#home",
   "scope": "./",
   "display": "standalone",

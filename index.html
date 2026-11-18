@@ -21,8 +21,8 @@
 :root{
   --bg:#FAFAFB; --surface:#FFFFFF; --surface-2:#F4F1F3; --ink:#2A1F26; --muted:#6B5F66; --line:#ECE6EA;
   --accent:#C2187A; --accent-ink:#FFFFFF; --sun:#F7B5CB; --sun-soft:#FDEEF4;
-  --ok:#2F7D4F; --ok-soft:#E1F1E6; --warn:#A86E12; --warn-soft:#FBF0DA; --bad:#B0412D; --bad-soft:#F8E3DE; --info:#3E58A8; --info-soft:#E3E8F7;
-  --c-walk:#1F7A63; --c-boarding:#4659A8; --c-daycare:#C2861F; --c-groom:#A9497A;
+  --ok:#0057A0; --ok-soft:#E3EEF8; --warn:#A86E12; --warn-soft:#FBF0DA; --bad:#B0412D; --bad-soft:#F8E3DE; --info:#0057A0; --info-soft:#E3EEF8;
+  --c-walk:#0057A0; --c-boarding:#7A3FA8; --c-daycare:#C2861F; --c-groom:#A9497A;
   --f-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
   --r:10px; --shadow:0 1px 2px rgba(40,20,30,.05), 0 4px 16px rgba(40,20,30,.06);
@@ -527,7 +527,7 @@ html.calm .badge,html.calm .nbadge{background:var(--muted)}
 html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--warn-soft:#2B2820;--bad-soft:#33221F;--info-soft:#1E2230}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
-/* ALL4PAWZ look: light pink and white, bold and simple */
+/* ALL4PAWS look: light pink and white, bold and simple */
 .logo-img{width:44px;height:44px;border-radius:50%;display:block;flex:none}
 .brand{font-weight:800;letter-spacing:.02em}
 .nav a{font-size:1.08rem;font-weight:800;color:var(--ink);padding:10px 20px}
@@ -563,7 +563,7 @@ footer a{color:inherit}
 <script>
 // ===== CORE (pure logic, also used to build the seed data) =====
 const DEFAULT_CFG = {
-  businessName: "ALL4PAWZ",
+  businessName: "ALL4PAWS",
   tagline: "Everything your dog needs in one place",
   area: "Your local area",
   phone: "07000 000000",
@@ -1240,7 +1240,7 @@ function viewAbout() {
     ph(c.heroPhoto || "img/logo.jpg", "Nicole with the dogs") + '</div></section>' +
     '<section class="block"><div class="wrap"><h2>The team</h2><div class="team"><div class="card"><h3>Nicole</h3><p class="muted">Founder. Walks, daycare, overnight stays and drop-ins.</p></div><div class="card"><h3>Lauren</h3><p class="muted">Groomer. Baths, tidy-ups and full clips.</p></div></div></div></section>';
 }
-const ABOUT_DEFAULT = "ALL4PAWZ is Nicole's dog care business: walks, daycare, overnight stays, drop-ins and grooming, all from one small team who get to know every dog by name.\n\nNicole looks after the walks, daycare, overnight stays and drop-ins herself, and Lauren runs the grooming. Dogs stay in a real home, keep their own food and routine, and you get photos and notes after every visit.\n\nWe're always happy to meet new dogs. Book a free meet and greet and come and say hello.";
+const ABOUT_DEFAULT = "ALL4PAWS is Nicole's dog care business: walks, daycare, overnight stays, drop-ins and grooming, all from one small team who get to know every dog by name.\n\nNicole looks after the walks, daycare, overnight stays and drop-ins herself, and Lauren runs the grooming. Dogs stay in a real home, keep their own food and routine, and you get photos and notes after every visit.\n\nWe're always happy to meet new dogs. Book a free meet and greet and come and say hello.";
 
 // ----- booking -----
 function bookPets() { return S.me ? petsOf(S.me).filter(p => (S.draft.petIds || []).includes(p.id)) : (S.draft.p_name ? [{ name: S.draft.p_name, weight: S.draft.p_weight }] : []); }
