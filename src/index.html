@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#FDE7EF">
+<meta name="theme-color" content="#FFFFFF">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="Dog Co.">
@@ -15,13 +15,13 @@
 <style>
 /* Layout idea: a public site and an operator console share one shell; the console is dense, scannable rows with state pills, the site is roomy. */
 :root{
-  --bg:#FFF5F8; --surface:#FFFFFF; --surface-2:#FDE7EF; --ink:#3D1F2C; --muted:#7A5866; --line:#F5D3DF;
-  --accent:#C2416F; --accent-ink:#FFFFFF; --sun:#F7B5CB; --sun-soft:#FDECF2;
+  --bg:#FAFAFB; --surface:#FFFFFF; --surface-2:#F4F1F3; --ink:#2A1F26; --muted:#6B5F66; --line:#ECE6EA;
+  --accent:#C2187A; --accent-ink:#FFFFFF; --sun:#F7B5CB; --sun-soft:#FDEEF4;
   --ok:#2F7D4F; --ok-soft:#E1F1E6; --warn:#A86E12; --warn-soft:#FBF0DA; --bad:#B0412D; --bad-soft:#F8E3DE; --info:#3E58A8; --info-soft:#E3E8F7;
   --c-walk:#1F7A63; --c-boarding:#4659A8; --c-daycare:#C2861F; --c-groom:#A9497A;
   --f-display:"Bricolage Grotesque", "Avenir Next", system-ui, sans-serif;
   --f-body:"Figtree", "Segoe UI", system-ui, sans-serif;
-  --r:10px; --shadow:0 1px 2px rgba(120,40,70,.06), 0 4px 16px rgba(120,40,70,.07);
+  --r:10px; --shadow:0 1px 2px rgba(40,20,30,.05), 0 4px 16px rgba(40,20,30,.06);
   color-scheme: light;
 }
 @media (prefers-color-scheme: dark){
@@ -71,7 +71,7 @@ button,input,select,textarea{font:inherit;color:inherit}
 .nav a.admin-link{border:1px dashed var(--line)}
 .modesw{display:inline-flex;gap:2px;padding:3px;border-radius:999px;background:var(--surface-2,var(--line));border:1px solid var(--line);margin-left:auto}
 .modesw button{all:unset;cursor:pointer;padding:7px 14px;border-radius:999px;font-weight:700;font-size:.88rem;color:var(--muted);display:inline-flex;align-items:center;gap:6px;white-space:nowrap}
-.modesw button[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.modesw button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
 .modesw button:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
 .modesw + .nav{margin-left:8px}
 .nav[hidden]{display:none!important}
@@ -540,6 +540,11 @@ html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--w
 .svc-list h3{font-size:1.15rem;margin:0 0 4px}
 .svc-list p{margin:0}
 .svc-list li.soon{background:var(--sun-soft);border-style:dashed;border-color:var(--sun)}
+.hero{background:linear-gradient(180deg,var(--sun-soft),var(--bg))}
+.svc-list li{border-left:4px solid var(--sun)}
+.svc-list li:hover{border-color:var(--sun);border-left-color:var(--accent)}
+.eyebrow,.svc-list h3{color:var(--accent)}
+.svc-list h3{color:var(--ink)}
 .cat.portrait{background:var(--accent)}
 .soon-pill{background:var(--accent);color:var(--accent-ink);margin-right:6px;vertical-align:2px}
 .about-copy p{font-size:1.08rem;margin:0 0 14px;max-width:56ch}
