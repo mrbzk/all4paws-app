@@ -984,6 +984,7 @@ window.addEventListener("hashchange", () => { if (view() !== "book") S.done = nu
 const LOGO = '<img class="logo-img" src="img/logo-160.png" alt="" width="44" height="44">';
 
 const NAV_IC = {
+  about: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg>',
   home: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
   book: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M12 14v4M10 16h4"/></svg>',
   messages: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M4 5h16v11H9l-5 4z"/></svg>',
@@ -1046,7 +1047,7 @@ function render() {
   document.title = c.businessName + " Platform";
   const isAdmin = v === "admin" && S.canAdmin;
   if (v !== "admin") S.lastCustView = v;
-  const nav = isAdmin ? [] : [["book", "Book"], ["portal", "Account"]];
+  const nav = isAdmin ? [] : [["about", "About us"], ["book", "Book"], ["portal", "Account"]];
   if (!S.canAdmin && v === "admin") nav.push(["admin", "Back office"]);
   const nY = needsYou() && !isQuiet() ? needsYou() : 0;
   const modeSw = S.canAdmin ? '<div class="modesw" role="group" aria-label="Switch view"><button type="button" data-act="view-mode" data-id="customer" aria-pressed="' + !isAdmin + '">Customer</button><button type="button" data-act="view-mode" data-id="admin" aria-pressed="' + isAdmin + '">Admin' + (nY && !isAdmin ? ' <span class="nbadge num" aria-label="needs you">' + nY + "</span>" : "") + "</button></div>" : "";
