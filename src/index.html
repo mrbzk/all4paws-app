@@ -548,6 +548,7 @@ html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--w
 .cat.portrait{background:var(--accent)}
 .soon-pill{background:var(--accent);color:var(--accent-ink);margin-right:6px;vertical-align:2px}
 .about-copy p{font-size:1.08rem;margin:0 0 14px;max-width:56ch}
+.about-copy{margin-top:18px}.about-copy h2{margin-bottom:10px}
 .team{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
 footer a{color:inherit}
 @media (max-width:900px){.hero .wrap{grid-template-columns:1fr}.hero-photo,.about-photo{max-width:520px}}
@@ -556,6 +557,13 @@ footer a{color:inherit}
 .signin-cta{background:var(--sun-soft);border:1px dashed var(--sun);border-radius:14px;padding:16px;display:flex;flex-direction:column;gap:10px}
 .signin-cta p{margin:0}
 .sr-only{position:absolute;width:1px;height:1px;overflow:hidden;clip:rect(0 0 0 0);white-space:nowrap}
+
+.art{margin:0;display:flex;flex-direction:column;gap:6px}
+.art img{width:100%;border-radius:20px;box-shadow:var(--shadow);display:block}
+.art-grid{display:grid;grid-template-columns:1.1fr 1fr;gap:32px;align-items:start}
+.ticks{margin:0 0 14px;padding-left:20px}.ticks li{margin:4px 0}
+.portrait-cta{background:var(--sun-soft);border-color:var(--sun);max-width:760px}
+@media (max-width:900px){.art-grid{grid-template-columns:1fr}}
 </style>
 </head>
 <body>
@@ -1082,7 +1090,7 @@ async function saveProfile(fd) {
 }
 
 // ----- router -----
-function view() { const h = location.hash.slice(1); return ["home", "book", "messages", "portal", "admin", "about"].includes(h) ? h : "home"; }
+function view() { const h = location.hash.slice(1); return ["home", "book", "messages", "portal", "admin", "about", "portraits"].includes(h) ? h : "home"; }
 window.addEventListener("hashchange", () => { if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); });
 
 // ----- rendering -----
@@ -1165,11 +1173,12 @@ function render() {
   if (S.mode === "loading") html += '<div class="wrap" style="padding:60px 20px"><p class="muted">Loading bookings…</p></div>';
   else if (v === "home") html += viewHome();
   else if (v === "about") html += viewAbout();
+  else if (v === "portraits") html += viewPortraits();
   else if (v === "book") html += viewBook();
   else if (v === "portal") html += viewPortal();
   else if (v === "messages") html += viewMessages();
   else if (v === "admin") html += S.canAdmin ? viewAdmin() : S.fb ? liveAuthView(true) : '<div class="wrap" style="padding:60px 20px"><div class="empty">The back office is for the team only.</div></div>';
-  if (v !== "admin") html += '<footer><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#home">Services</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div></footer>';
+  if (v !== "admin") html += '<footer><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#home">Services</a> · <a href="#portraits">Pet Portraits</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div></footer>';
   if (S.modal) html += viewModal();
   if (S.toast) html += '<div class="toast" role="status"><span>' + esc(S.toast) + "</span>" + (S.toastUndo ? '<button type="button" data-act="undo">Undo</button>' : "") + "</div>";
   const active = document.activeElement; const aid = active && active.id; const pos = active && active.selectionStart;
@@ -1334,10 +1343,27 @@ function viewHome() {
   return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#about">About us</a></div></div>' +
     '<figure class="hero-photo"><img src="' + esc(c.heroPhoto || "img/logo.jpg") + '" alt="Nicole with the dogs" width="900" height="900"></figure></div></section>' +
     '<section class="block"><div class="wrap"><h2>Services</h2><ul class="svc-list">' + HOME_SERVICES.map(([cat, name, line]) => '<li><span class="cat ' + cat + '" aria-hidden="true"></span><div><h3>' + name + '</h3><p class="muted">' + line + "</p></div></li>").join("") +
-    '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Nicole is working with an artist on personalised portraits of your dog, in handmade frames.</p></div></li></ul>' +
+    '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Bespoke, hyperrealistic watercolour portraits of your dog by award-winning artist Adrian Smart. A timeless keepsake, or a gift to treasure.</p><p style="margin:8px 0 0"><a href="#portraits">See his work</a></p></div></li></ul>' +
     '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a></div></div></section>' +
     '<section class="block"><div class="wrap"><h2>How booking works</h2><ol class="steps"><li><h4>Request online</h4><p class="muted small">Pick a service, dates and your dogs.</p></li><li><h4>We confirm</h4><p class="muted small">New customers start with a free meet and greet.</p></li><li><h4>Updates after every visit</h4><p class="muted small">Photos and notes in your account.</p></li></ol></div></section>' +
     '<section class="block"><div class="wrap"><h2>Before a stay</h2><p class="muted">Daycare and overnight stays need up-to-date vaccinations. Add the dates when you book and we\'ll remind you before they lapse.</p><div class="policy"><div class="card"><h4>Vaccinations we check</h4><p class="muted small" style="margin-top:6px">Rabies, DHPP (distemper, hepatitis, parvovirus, parainfluenza) and kennel cough (Bordetella). Kennel cough must be at least 7 days old before boarding.</p></div><div class="card"><h4>Cancellations</h4><p class="muted small" style="margin-top:6px">Walks and grooming: free to cancel until 24 hours before. Boarding: free until 7 days before, then the first night is charged.</p></div></div></div></section>';
+}
+function viewPortraits() {
+  const fig = (src, alt) => '<figure class="art"><img src="' + src + '" alt="' + esc(alt) + '" loading="lazy"><figcaption class="small muted">' + esc(alt) + "</figcaption></figure>";
+  const cta = S.me ? '<a class="btn primary lg" href="#messages">Message us to register interest</a>' : '<a class="btn primary lg" href="#portal">Sign in to register interest</a>';
+  return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">Coming soon</p><h1 class="quote">Commission bespoke dog artwork</h1><div class="about-copy">' +
+    "<p>I'm delighted to share that I am now collaborating with Adrian Smart, a highly regarded professional watercolour artist with an impressive background in Graphic Design and Fine Art, to offer exclusive, bespoke commissioned dog portraits.</p>" +
+    "<p>Adrian's work is truly exceptional. Combining remarkable detail with a hyperrealistic, almost photographic style, his portraits capture each subject with incredible precision, complemented by beautifully soft, atmospheric backgrounds. The result is artwork that not only captures a dog's appearance but also celebrates their individual character and personality.</p>" +
+    '</div><div class="row">' + cta + "</div></div>" + fig("img/portrait-1.jpg", "A portrait by Adrian Smart") + "</div></section>" +
+    '<section class="block"><div class="wrap art-grid"><div class="about-copy">' +
+    "<h2>About Adrian</h2><p>Beyond canine portraits, Adrian also specialises in fine art portraits, landscapes and commemorative artwork, with each piece created using an exceptional level of skill and attention to detail.</p>" +
+    "<p>His impressive credentials include representation by The Plus One Gallery in London, internationally recognised for its specialism in Hyperrealism and Photorealism. Adrian is also a multiple award-winning artist whose work has been featured on BBC Radio Oxford and in The Public Catalogue Foundation.</p>" +
+    '<p>His exhibition history includes prestigious events such as:</p><ul class="ticks"><li>The National Exhibition of Wildlife Art</li><li>Marwell International Art Society</li><li>Botanical Art Society</li></ul>' +
+    "</div>" + fig("img/portrait-2.jpg", "A puppy portrait by Adrian Smart") + "</div></section>" +
+    '<section class="block"><div class="wrap"><div class="card stack portrait-cta"><h2>A truly special way to celebrate the dogs we love</h2>' +
+    "<p>Whether you're looking to commission a portrait of your own dog, create a meaningful birthday or anniversary gift, or preserve the memory of a much-loved companion, these bespoke artworks offer a timeless keepsake to treasure for years to come.</p>" +
+    "<p>I'm so pleased to be able to offer access to such beautiful, individually crafted artwork and look forward to sharing more with you soon.</p>" +
+    '<p class="muted">Nicole</p><div class="row">' + cta + "</div></div></div></section>";
 }
 function viewAbout() {
   const c = C(); const ph = (src, alt) => '<figure class="about-photo"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></figure>';
