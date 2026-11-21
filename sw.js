@@ -1,6 +1,6 @@
 // Nicole's Dog Co. service worker
 // Bump VERSION on every deploy so phones pick up the new app (the app shows "A new version is ready").
-const VERSION = "dogco-2026-11-18-1";
+const VERSION = "dogco-20261121-1";
 const SHELL = "shell-" + VERSION;
 const RUNTIME = "runtime-" + VERSION;
 const SHELL_FILES = ["./", "./index.html", "./offline.html", "./manifest.webmanifest", "./firebase-config.js",

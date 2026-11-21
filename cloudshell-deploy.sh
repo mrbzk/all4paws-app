@@ -19,4 +19,5 @@ echo "== Building and deploying"
 python3 build.py src/index.html
 firebase deploy --only hosting,firestore:rules --project "$P" --non-interactive
 echo ""
+git checkout -- sw.js index.html 2>/dev/null || true
 echo "Done. Open https://$P.web.app"

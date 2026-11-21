@@ -13,3 +13,10 @@ head = marker + '''
 out = src.replace(marker, head, 1)
 pathlib.Path("index.html").write_text(out, encoding="utf-8")
 print("Built index.html (%d bytes)" % len(out))
+
+
+# stamp_sw: give the service worker a new version on every build, so installed apps update
+import datetime as _dt, re as _re, pathlib as _pl
+_p = _pl.Path(__file__).with_name("sw.js")
+_s = _p.read_text()
+_p.write_text(_re.sub(r'const VERSION = "[^"]+";', 'const VERSION = "dogco-' + _dt.datetime.now(_dt.timezone.utc).strftime("%Y%m%d-%H%M%S") + '";', _s, count=1))
