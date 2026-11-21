@@ -592,6 +592,11 @@ footer a{color:inherit}
 
 .viewsite{margin-left:auto;font-weight:700;color:var(--accent);text-decoration:none;padding:8px 4px}
 .viewsite:hover{text-decoration:underline}
+
+.howto{border:1px solid var(--line);border-radius:12px;padding:10px 14px;background:var(--surface-2)}
+.howto summary{cursor:pointer;font-weight:700}
+.howto ol{margin:8px 0 6px;padding-left:20px}
+.paycard{border-color:var(--accent);background:var(--sun-soft)}
 </style>
 </head>
 <body>
@@ -1022,6 +1027,63 @@ async function boot() {
   render();
 }
 
+
+
+// ----- integrations: Xero (invoice export file) and Stripe (Payment Links) -----
+// Works without a server: Xero imports the CSV in its own format; Stripe Payment Links take card payments and
+// deposits on Stripe's own page. A full live connection (automatic sync, paid status coming back) needs a small
+// server (Firebase Functions on the Blaze plan) and can be added later.
+const XERO_DEFAULT = { accountCode: "200", taxType: "No VAT", prefix: "A4P-", dueDays: 14 };
+const STRIPE_DEFAULT = { depositLink: "", depositLabel: "", depositFor: "boarding", payLink: "" };
+const XERO_TAX = ["No VAT", "20% (VAT on Income)", "5% (VAT on Income)", "Zero Rated Income", "Exempt Income"];
+const XERO_COLS = ["*ContactName", "EmailAddress", "POAddressLine1", "POAddressLine2", "POAddressLine3", "POAddressLine4", "POCity", "PORegion", "POPostalCode", "POCountry", "*InvoiceNumber", "Reference", "*InvoiceDate", "*DueDate", "InventoryItemCode", "*Description", "*Quantity", "*UnitAmount", "Discount", "*AccountCode", "*TaxType", "TrackingName1", "TrackingOption1", "TrackingName2", "TrackingOption2", "Currency", "BrandingTheme"];
+const xeroCfg = () => Object.assign({}, XERO_DEFAULT, C().xero || {});
+const stripeCfg = () => Object.assign({}, STRIPE_DEFAULT, C().stripe || {});
+const ukDate = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "";
+function xeroEligible(includeSent) { return S.bookings.filter(b => b.status === "completed" && !b.paid && (includeSent || !b.xeroAt) && b.clientId); }
+function xeroExport(includeSent) {
+  const x = xeroCfg(); const t = todayISO(); const due = addDays(t, Number(x.dueDays) || 14);
+  const list = xeroEligible(includeSent); const byClient = {};
+  list.forEach(b => (byClient[b.clientId] = byClient[b.clientId] || []).push(b));
+  const rows = []; const used = new Set();
+  Object.keys(byClient).forEach(cid => {
+    const cl = client(cid) || { name: "Unknown customer" };
+    let no = (x.prefix || "") + invoiceNo(cl).replace(/^INV-/, ""); let n = 2; while (used.has(no)) no = no.replace(/-\d+$/, "") + "-" + n++; used.add(no);
+    byClient[cid].sort((a, b) => a.date.localeCompare(b.date)).forEach(b => linesFor(b).forEach(l => {
+      const desc = (l.description + (l.pet && !/,/.test(l.description) ? ", " + l.pet : "")).replace(/\u00a0/g, " ");
+      rows.push([cl.name, cl.email || "", cl.address || "", "", "", "", "", "", "", "", no, C().businessName, ukDate(t), ukDate(due), "", desc, l.qty || 1, Number(l.unitPrice || l.amount || 0).toFixed(2), "", x.accountCode, x.taxType, "", "", "", "", "GBP", ""]);
+    }));
+  });
+  return { rows, bookings: list, invoices: Object.keys(byClient).length };
+}
+function csvOf(header, rows) { return [header].concat(rows).map(r => r.map(v => { const x = String(v == null ? "" : v); return /[",\n]/.test(x) ? '"' + x.replace(/"/g, '""') + '"' : x; }).join(",")).join("\r\n"); }
+async function downloadText(name, text, mime) {
+  try { if (window.claude && typeof window.claude.use === "function") { const dl = await window.claude.use("downloads"); if (dl) { await dl.save({ filename: name, data: text }); return true; } } } catch (e) {}
+  try { const url = URL.createObjectURL(new Blob([text], { type: mime || "text/csv" })); const a = document.createElement("a"); a.href = url; a.download = name; document.body.appendChild(a); a.click(); a.remove(); setTimeout(() => URL.revokeObjectURL(url), 2000); return true; } catch (e) { return false; }
+}
+function stripeUrl(link, cl, ref) {
+  if (!link) return "";
+  try { const u = new URL(link); if (cl && cl.email) u.searchParams.set("prefilled_email", cl.email); if (ref) u.searchParams.set("client_reference_id", String(ref).replace(/[^A-Za-z0-9_-]/g, "").slice(0, 200)); return u.toString(); } catch (e) { return ""; }
+}
+const okStripeLink = v => !v || /^https:\/\/(buy|donate)\.stripe\.com\/[A-Za-z0-9_/-]+$/.test(v);
+function depositBox(b) {
+  const st = stripeCfg(); const url = stripeUrl(st.depositLink, client(b.clientId), b.ref);
+  if (!url) return "";
+  return '<div class="wrap" style="max-width:640px;padding:0 20px 40px"><div class="card stack paycard"><h3>Secure your booking</h3><p>Pay your ' + (st.depositLabel ? esc(st.depositLabel) + " " : "") + 'deposit by card. It comes off your final bill.</p><div class="row"><a class="btn primary" href="' + esc(url) + '" target="_blank" rel="noopener">Pay deposit by card</a></div><p class="small muted">You\'ll pay on Stripe\'s secure page. You can also pay by bank transfer using the details at the bottom of the page.</p></div></div>';
+}
+function depositApplies(cat) { const s = stripeCfg(); return !!s.depositLink && (s.depositFor === "all" || (s.depositFor === "boarding" && cat === "boarding")); }
+function integrationsCards(sec) {
+  const hid = sec === "integrations" ? "" : " hidden"; const x = xeroCfg(); const st = stripeCfg();
+  const pend = xeroEligible(false); const pendInv = new Set(pend.map(b => b.clientId)).size;
+  let h = '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Xero</h3><p class="small muted">Turn completed, unpaid work into Xero invoices. One invoice per customer, with a line for each visit, dog and add-on.</p></div><span class="pill ' + (pendInv ? "requested" : "ok") + '">' + (pendInv ? pendInv + " ready to export" : "Nothing new") + "</span></div>" +
+    '<div class="row"><button type="button" class="btn primary" data-act="xero-export"' + (pendInv ? "" : " disabled") + ">Download Xero invoices file</button>" + '<label class="opt" style="margin:0"><input type="checkbox" id="xero-again"><span class="small">Include work already exported</span></label></div>' +
+    '<details class="howto"><summary>How to import it into Xero</summary><ol class="small"><li>In Xero, go to <strong>Business &gt; Invoices</strong>.</li><li>Click <strong>Import</strong>, choose the file you downloaded, and press Import.</li><li>Check the draft invoices, then approve and send them from Xero.</li></ol><p class="small muted">Exported work is marked, so it won\'t be exported twice. When a customer pays, mark the visit paid in Money.</p></details>' +
+    '<form class="stack" data-form="xero-settings"><div class="grid2"><div class="field"><label for="xr-acc">Sales account code</label><input type="text" id="xr-acc" name="accountCode" value="' + esc(x.accountCode) + '"><span class="hint">Usually 200 (Sales) in Xero.</span></div><div class="field"><label for="xr-tax">Tax rate</label><select id="xr-tax" name="taxType">' + XERO_TAX.map(t => "<option" + (t === x.taxType ? " selected" : "") + ">" + esc(t) + "</option>").join("") + '</select></div><div class="field"><label for="xr-pre">Invoice number starts with</label><input type="text" id="xr-pre" name="prefix" value="' + esc(x.prefix) + '"></div><div class="field"><label for="xr-due">Payment due after (days)</label><input type="number" id="xr-due" name="dueDays" min="0" max="90" value="' + esc(x.dueDays) + '"></div></div><div class="row"><button class="btn" type="submit">Save Xero settings</button></div></form></section>';
+  h += '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Stripe</h3><p class="small muted">Take card payments and deposits through Stripe Payment Links. Customers pay on Stripe\'s secure page, and the money goes to your Stripe account.</p></div><span class="pill ' + (st.depositLink || st.payLink ? "ok" : "requested") + '">' + (st.depositLink || st.payLink ? "Connected" : "Not set up") + "</span></div>" +
+    '<details class="howto"><summary>How to set up the two links in Stripe</summary><ol class="small"><li>In your Stripe Dashboard, go to <strong>Payment Links</strong> and click <strong>New</strong>.</li><li><strong>Deposit:</strong> add a product such as "Booking deposit" with a fixed price, for example £20. Create the link and copy it.</li><li><strong>Pay a bill:</strong> add a product such as "ALL4PAWS payment" and choose <strong>Customers choose what to pay</strong>. Create the link and copy it.</li><li>Paste both links below and save.</li></ol><p class="small muted">The customer\'s email and booking reference are filled in on Stripe\'s page, so you can match payments in Stripe. Mark bookings paid in Money once the payment shows in Stripe.</p></details>' +
+    '<form class="stack" data-form="stripe-settings"><div class="field"><label for="st-dep">Deposit payment link</label><input type="url" id="st-dep" name="depositLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.depositLink) + '"></div><div class="grid2"><div class="field"><label for="st-lbl">Deposit amount shown to customers</label><input type="text" id="st-lbl" name="depositLabel" placeholder="£20" value="' + esc(st.depositLabel) + '"></div><div class="field"><label for="st-for">Ask for a deposit on</label><select id="st-for" name="depositFor"><option value="boarding"' + (st.depositFor === "boarding" ? " selected" : "") + '>Overnight stays only</option><option value="all"' + (st.depositFor === "all" ? " selected" : "") + '>Every booking</option><option value="none"' + (st.depositFor === "none" ? " selected" : "") + '>No deposits</option></select></div></div><div class="field"><label for="st-pay">Pay-a-bill link (customer enters the amount)</label><input type="url" id="st-pay" name="payLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.payLink) + '"><span class="hint">Shown as Pay by card in each customer\'s account when they owe money.</span></div><p class="small muted">Never paste a Stripe secret key here. Payment Links are safe to share.</p><div class="row"><button class="btn" type="submit">Save Stripe settings</button></div></form></section>';
+  return h;
+}
 
 // ----- sign-in (Firebase Authentication) -----
 // Staff (emails listed in config/admins) load everything. A customer loads only their own record, dogs, bookings and
@@ -1462,7 +1524,7 @@ function viewBook() {
   const c = C(); const d = S.draft; const t = todayISO();
   if (S.done) {
     const b = S.done;
-    return '<div class="wrap" style="padding:40px 20px;max-width:640px"><div class="card stack"><span class="pill ' + b.status + '" style="align-self:flex-start">' + (b.status === "confirmed" ? "Booked" : "Awaiting approval") + '</span><h2>' + (b.status === "confirmed" ? "You\'re booked in" : "Thanks, we\'ve got your request") + '</h2><p>' + esc(b.count > 1 ? b.count + " visits for " : "") + esc(b.svc) + " for " + esc(b.pets) + ", starting " + esc(fmtDate(b.date, { weekday: "long", day: "numeric", month: "long" })) + '.</p><p class="muted">' + (b.status === "confirmed" ? "It\'s in the diary. You can see it in your account." : "We review every request before it goes in the diary, usually within a few hours. You\'ll see the decision in your account.") + '</p><div class="row"><a class="btn primary" href="#portal">Go to my account</a><button class="btn" data-act="book-again">Book something else</button></div></div></div>';
+    return '<div class="wrap" style="padding:40px 20px;max-width:640px"><div class="card stack"><span class="pill ' + b.status + '" style="align-self:flex-start">' + (b.status === "confirmed" ? "Booked" : "Awaiting approval") + '</span><h2>' + (b.status === "confirmed" ? "You\'re booked in" : "Thanks, we\'ve got your request") + '</h2><p>' + esc(b.count > 1 ? b.count + " visits for " : "") + esc(b.svc) + " for " + esc(b.pets) + ", starting " + esc(fmtDate(b.date, { weekday: "long", day: "numeric", month: "long" })) + '.</p><p class="muted">' + (b.status === "confirmed" ? "It\'s in the diary. You can see it in your account." : "We review every request before it goes in the diary, usually within a few hours. You\'ll see the decision in your account.") + '</p><div class="row"><a class="btn primary" href="#portal">Go to my account</a><button class="btn" data-act="book-again">Book something else</button></div></div></div>' + (depositApplies(b.cat) ? depositBox(b) : "");
   }
   const svc = svcById(d.serviceId);
   const pets = bookPets();
@@ -1575,6 +1637,7 @@ async function submitBooking() {
     const reps = svc.cat === "walk" ? Math.max(1, Number(d.repeat) || 1) : 1;
     const series = reps > 1 ? uid("r") : "";
     const status = needsApproval(c, svc, client(cid) || { approved: false }) ? "requested" : "confirmed";
+    let firstRef = "";
     for (let i = 0; i < reps; i++) {
       const date = addDays(d.date, i * 7);
       const b = { id: uid("b"), serviceId: svc.id, cat: svc.cat, clientId: cid, petIds: pets.map(p => p.id), date, endDate: svc.cat === "boarding" ? d.endDate : "", slot: d.slot || "", status, staffId: status === "confirmed" ? defaultStaff(c, svc.cat).id : "", notes: d.notes || "", paid: false, report: null, series, createdAt: new Date().toISOString() };
@@ -1583,10 +1646,10 @@ async function submitBooking() {
       b.addons = pricedAddons(c, d.addons || [], svc, pets, b.date, b.endDate);
       b.price = priceFor(ps, pets, b.date, b.endDate) + addonTotal(b.addons);
       b.lines = buildLines(ps, pets, b.date, b.endDate).concat(addonLines(b.addons, pets, svc.cat === "boarding" ? daysBetween(b.date, b.endDate) : 1));
-      await put("bookings", b);
+      await put("bookings", b); if (!firstRef) firstRef = b.id;
     }
     S.me = cid; remember();
-    S.done = { svc: svc.name, pets: pets.map(p => p.name).join(" & "), date: d.date, count: reps, status };
+    S.done = { svc: svc.name, pets: pets.map(p => p.name).join(" & "), date: d.date, count: reps, status, cat: svc.cat, ref: firstRef, clientId: cid };
     S.draft = { repeat: 1 }; S.errors = [];
     render(); window.scrollTo(0, 0);
   } catch (e) { /* toast already shown */ }
@@ -1720,7 +1783,7 @@ function viewPortal() {
   const myMsgs = threadMsgs(me.id); const myUnread = unreadForClient(me.id);
   h += '<div class="card stack"><div class="row" style="justify-content:space-between"><h3>Messages' + (myUnread ? ' <span class="badge num">' + myUnread + " new</span>" : "") + '</h3><a class="btn sm' + (myUnread ? " primary" : "") + '" href="#messages">' + (myMsgs.length ? "Open" : "Message us") + "</a></div>" + (myMsgs.length ? '<div class="chat mini">' + myMsgs.slice(-2).map(m => bubble(m, "client")).join("") + "</div>" : '<p class="small muted">Questions, changes or a photo of your dog. We\'ll reply here.</p>') + "</div>";
   h += '<div class="card"><h3 style="margin-bottom:8px">Report cards</h3><div class="list">' + (past.length ? past.map(b => { const s = svcById(b.serviceId) || {}; const r = b.report; return '<div class="li"><span class="cat ' + b.cat + '"></span><div class="grow"><strong>' + esc(s.name || "") + '</strong><div class="small muted">' + esc(when(b)) + " · " + esc(petNames(b)) + "</div></div>" + (r ? '<div class="report"><div class="row" style="justify-content:space-between"><strong>Mood: ' + esc(r.mood) + '</strong><span class="small muted">' + esc(staffName(r.staffId)) + '</span></div><div class="ticks">' + (r.ticks || []).map(x => '<span class="tick">' + esc(x) + "</span>").join("") + "</div><p>" + esc(r.note) + "</p></div>" : "") + "</div>"; }).join("") : '<div class="empty">Report cards appear here after each visit.</div>') + "</div></div>";
-  h += '</div><div class="stack"><div class="card"><div class="row" style="justify-content:space-between"><h3>Balance</h3>' + (due > 0 ? '<span class="pill unpaid num">' + money(due) + " due</span>" : '<span class="pill paid">All paid</span>') + '</div><div class="list" style="margin-top:8px">' + (past.length ? past.slice(0, 8).map(b => '<div class="li"><div class="grow small">' + esc(fmtDate(b.date)) + " · " + esc((svcById(b.serviceId) || {}).name || "") + '</div><span class="num">' + money(b.price) + '</span><span class="pill ' + (b.paid ? "paid" : "unpaid") + '">' + (b.paid ? "Paid" : "Unpaid") + "</span>" + (b.paid ? "" : '<div class="report small">' + linesFor(b).map(l => '<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:12px"><span>' + esc(l.adjust ? "Adjustment to agreed price" : (l.pet + (l.size ? " (" + SIZE_NAME[l.size] + ")" : ""))) + (l.adjust ? "" : ", " + esc(l.qty) + " " + esc(l.unit + (l.qty === 1 ? "" : "s")) + " × " + money(l.unitPrice)) + '</span><span class="num">' + money(l.amount) + "</span></div>").join("") + "</div>") + "</div>").join("") : '<p class="muted small">No invoices yet.</p>') + "</div></div>";
+  h += '</div><div class="stack"><div class="card"><div class="row" style="justify-content:space-between"><h3>Balance</h3>' + (due > 0 ? '<span class="pill unpaid num">' + money(due) + " due</span>" : '<span class="pill paid">All paid</span>') + '</div>' + (due > 0 && stripeCfg().payLink ? '<div class="stack" style="margin-top:10px"><a class="btn primary" href="' + esc(stripeUrl(stripeCfg().payLink, me, "bal-" + me.id)) + '" target="_blank" rel="noopener">Pay ' + money(due) + ' by card</a><span class="small muted">Enter ' + money(due) + ' on Stripe\'s secure page.</span></div>' : "") + '<div class="list" style="margin-top:8px">' + (past.length ? past.slice(0, 8).map(b => '<div class="li"><div class="grow small">' + esc(fmtDate(b.date)) + " · " + esc((svcById(b.serviceId) || {}).name || "") + '</div><span class="num">' + money(b.price) + '</span><span class="pill ' + (b.paid ? "paid" : "unpaid") + '">' + (b.paid ? "Paid" : "Unpaid") + "</span>" + (b.paid ? "" : '<div class="report small">' + linesFor(b).map(l => '<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:12px"><span>' + esc(l.adjust ? "Adjustment to agreed price" : (l.pet + (l.size ? " (" + SIZE_NAME[l.size] + ")" : ""))) + (l.adjust ? "" : ", " + esc(l.qty) + " " + esc(l.unit + (l.qty === 1 ? "" : "s")) + " × " + money(l.unitPrice)) + '</span><span class="num">' + money(l.amount) + "</span></div>").join("") + "</div>") + "</div>").join("") : '<p class="muted small">No invoices yet.</p>') + "</div></div>";
   h += '<div class="card"><h3>Your prices</h3><p class="small muted" style="margin:4px 0 8px">Per dog. These are the prices you pay when you book while signed in.</p><div class="list">' + C().services.map(sv => { const mine = clientSvc(sv, me); return '<div class="li" style="padding:8px 0"><span class="cat ' + sv.cat + '"></span><div class="grow small">' + esc(sv.name) + '</div><span class="num small">' + priceText(mine).replace(/<\/?small>/g, "") + "</span>" + (mine.custom ? '<span class="pill ok">Your rate</span>' : "") + "</div>"; }).join("") + "</div></div>";
   h += '<div class="card"><div class="row" style="justify-content:space-between"><h3>My dogs</h3><button class="btn sm" data-act="pet-new" data-client="' + esc(me.id) + '">Add a dog</button></div><div class="stack" style="margin-top:10px">' + (pets.length ? pets.map(p => petCard(p, t, false)).join("") : '<p class="muted small">No dogs yet.</p>') + "</div></div></div></div></div>";
   return h;
@@ -2009,7 +2072,7 @@ function adminBilling() {
   h += '<div class="card stack"><h3>This month by service</h3>' + byCat.map(x => '<div><div class="row" style="justify-content:space-between"><span class="row" style="gap:6px;flex-wrap:nowrap"><span class="cat ' + x.k + '"></span>' + CAT_LABEL[x.k] + '</span><span class="num">' + money(x.v) + '</span></div><div class="meter" style="height:10px"><i style="width:' + Math.round(x.v / max * 100) + "%;background:var(--c-" + x.k + ')"></i></div></div>').join("") + "</div>";
   return h;
 }
-const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
+const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["integrations", "Integrations"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
 const PER_HELP = { dog: "Per dog (2 dogs = charged twice)", dognight: "Per dog per night (2 dogs, 3 nights = 6 times)", booking: "Once per visit or stay", night: "Per night (3 nights = 3 times)" };
 function drawDaysOff() {
   const hid = document.getElementById("s-daysoff"); const box = document.getElementById("daysoff-list"); if (!hid || !box) return;
@@ -2025,6 +2088,7 @@ function adminSettings() {
   if (S.fb && S.authUser) { const hasPw = (S.authUser.providerData || []).some(x => x.providerId === "password");
     h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
   if (S.fb) h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => '<li class="li"><span>' + esc(em) + (S.authUser && String(S.authUser.email).toLowerCase() === em ? ' <span class="muted small">(you)</span>' : "") + "</span>" + (S.authUser && String(S.authUser.email).toLowerCase() === em ? "" : '<button type="button" class="btn sm" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button>') + "</li>").join("") + '</ul><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><button class="btn" type="submit">Add</button></form></section>';
+  h += integrationsCards(sec);
   h += '<form class="stack" data-form="settings">';
   if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
   if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
@@ -2043,7 +2107,7 @@ function adminSettings() {
   h += part("addons", "Add-ons", "Extras customers can tick after choosing a service.",
     '<div class="row"><button class="btn sm" type="button" data-act="addon-new">New add-on</button><span class="small muted">Save first if you\'ve changed anything else.</span></div>' + aoList.map(a => '<div class="ao-row"><div class="field"><label for="ao-n-' + esc(a.id) + '">Name</label><input type="text" id="ao-n-' + esc(a.id) + '" name="ao_name_' + esc(a.id) + '" value="' + esc(a.name) + '"></div><div class="field"><label for="ao-p-' + esc(a.id) + '">Price</label><input type="number" step="0.5" min="0" id="ao-p-' + esc(a.id) + '" name="ao_price_' + esc(a.id) + '" value="' + esc(a.price) + '"></div><div class="field"><label for="ao-u-' + esc(a.id) + '">Charged</label><select id="ao-u-' + esc(a.id) + '" name="ao_per_' + esc(a.id) + '">' + Object.keys(PER_HELP).map(k => '<option value="' + k + '"' + (a.per === k ? " selected" : "") + ">" + PER_HELP[k] + "</option>").join("") + '</select></div><div class="field" style="grid-column:1/-1"><label for="ao-d-' + esc(a.id) + '">Description</label><input type="text" id="ao-d-' + esc(a.id) + '" name="ao_desc_' + esc(a.id) + '" value="' + esc(a.desc || "") + '"></div><div class="svc-checks"><span class="small muted" style="align-self:center">Offer with:</span>' + c.services.map(sv => '<label><input type="checkbox" name="ao_svc_' + esc(a.id) + '" value="' + esc(sv.id) + '"' + ((a.services || []).includes(sv.id) ? " checked" : "") + ">" + esc(sv.name) + "</label>").join("") + '</div><div class="flags"><label><input type="checkbox" name="ao_active_' + esc(a.id) + '"' + (a.active !== false ? " checked" : "") + '>Offered</label><label><input type="checkbox" name="ao_del_' + esc(a.id) + '">Delete</label></div></div>').join(""));
   h += '<section class="card stack" data-sec="comfort"' + (sec === "comfort" ? "" : " hidden") + '><div><h3>Display</h3><p class="small muted">Make the screen easier on your eyes and brain. Saved straight away, no need to press Save.</p></div>' + comfortControls() + "</section>";
-  h += '<div class="row savebar"' + (sec === "logins" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
+  h += '<div class="row savebar"' + (sec === "logins" || sec === "integrations" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
   return h;
 }
 
@@ -2113,6 +2177,15 @@ async function handleClick(e) {
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
     case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo(0, 0); break;
+    case "xero-export": {
+      const again = !!(document.getElementById("xero-again") || {}).checked; const out = xeroExport(again);
+      if (!out.rows.length) { toast("Nothing to export."); break; }
+      const ok = await downloadText("xero-invoices-" + todayISO() + ".csv", csvOf(XERO_COLS, out.rows));
+      if (!ok) { S.modal = { type: "copy", text: csvOf(XERO_COLS, out.rows), csv: true }; render(); break; }
+      const at = new Date().toISOString();
+      for (const b of out.bookings) { try { await patchBooking(b.id, { xeroAt: at }); } catch (e) { break; } }
+      toast(out.invoices + (out.invoices === 1 ? " invoice" : " invoices") + " exported for Xero"); break;
+    }
     case "go-back": if (S.navCount > 1) history.back(); else navTo("home"); break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; navTo("portal"); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
@@ -2234,6 +2307,17 @@ async function handleSubmit(e) {
     return;
   }
   if (kind === "profile") { await saveProfile(fd); return; }
+  if (kind === "xero-settings") {
+    const x = { accountCode: String(fd.get("accountCode") || "200").trim(), taxType: String(fd.get("taxType") || "No VAT"), prefix: String(fd.get("prefix") || "").trim().slice(0, 12), dueDays: Math.max(0, Math.min(90, Number(fd.get("dueDays")) || 14)) };
+    try { await putCfg(Object.assign({}, S.cfg || {}, { xero: x })); forget(e.target); toast("Xero settings saved"); } catch (err) {}
+    return;
+  }
+  if (kind === "stripe-settings") {
+    const st = { depositLink: String(fd.get("depositLink") || "").trim(), depositLabel: String(fd.get("depositLabel") || "").trim().slice(0, 30), depositFor: String(fd.get("depositFor") || "boarding"), payLink: String(fd.get("payLink") || "").trim() };
+    if (!okStripeLink(st.depositLink) || !okStripeLink(st.payLink)) { toast("Paste the Payment Link from Stripe. It starts with https://buy.stripe.com/"); return; }
+    try { await putCfg(Object.assign({}, S.cfg || {}, { stripe: st })); forget(e.target); toast("Stripe settings saved"); } catch (err) {}
+    return;
+  }
   if (kind === "my-password") {
     const a = String(fd.get("pw1") || ""), b = String(fd.get("pw2") || "");
     if (a.length < 8) { toast("Use at least 8 characters."); return; }
