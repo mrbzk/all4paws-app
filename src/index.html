@@ -534,7 +534,10 @@ html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--w
 .hero .wrap{grid-template-columns:1fr 1fr}
 .hero-photo,.about-photo{margin:0;border-radius:28px;overflow:hidden;background:var(--surface);box-shadow:var(--shadow);aspect-ratio:1/1}
 .hero-photo img,.about-photo img{width:100%;height:100%;object-fit:cover;display:block}
-.svc-list{list-style:none;padding:0;margin:18px 0 0;display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:12px}
+.svc-list{list-style:none;padding:0;margin:18px 0 0;display:grid;grid-template-columns:repeat(3,1fr);gap:14px}
+.svc-list li{height:100%;box-sizing:border-box}
+@media (max-width:900px){.svc-list{grid-template-columns:repeat(2,1fr)}}
+@media (max-width:600px){.svc-list{grid-template-columns:1fr}}
 .svc-list li{display:flex;gap:14px;align-items:flex-start;background:var(--surface);border:1px solid var(--line);border-radius:16px;padding:18px}
 .svc-list li .cat{width:14px;height:14px;margin-top:6px;flex:none}
 .svc-list h3{font-size:1.15rem;margin:0 0 4px}
