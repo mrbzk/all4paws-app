@@ -1225,7 +1225,7 @@ function renderView() {
   const isAdmin = v === "admin" && S.canAdmin;
   if (v !== "admin") S.lastCustView = v;
   const nav = isAdmin ? [] : [["about", "About us"], ["book", "Book"], ["portal", "Account"]];
-  if (!isAdmin && (S.canAdmin || v === "admin")) nav.push(["admin", "Back office"]);
+  if (!isAdmin && S.canAdmin) nav.push(["admin", "Back office"]); // staff only, once signed in; everyone else uses "Staff sign in" in the footer
   const nY = needsYou() && !isQuiet() ? needsYou() : 0;
   const modeSw = isAdmin ? '<a class="viewsite" href="#home"><span aria-hidden="true">←</span> View site</a>' : "";
   document.body.classList.toggle("admin-mode", isAdmin);
