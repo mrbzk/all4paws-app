@@ -129,6 +129,8 @@ service cloud.firestore {
     // Card payments are written only by the payment server.
     match /payments/{id} { allow read: if isAdmin(); allow write: if false; }
     match /checkouts/{id} { allow read: if isAdmin(); allow write: if false; }
+    // The connected Stripe account and sign-in states: server only.
+    match /stripe/{id} { allow read, write: if false; }
 
     // Anything else: no access
     match /{document=**} { allow read, write: if false; }

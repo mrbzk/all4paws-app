@@ -18,10 +18,11 @@ if ! firebase projects:list >/dev/null 2>&1; then
   firebase login --no-localhost
 fi
 
-echo "== Checking your Stripe key is stored on the server"
+echo "== Checking the platform Stripe key is stored on the server"
 if ! firebase functions:secrets:access STRIPE_SECRET --project "$P" >/dev/null 2>&1; then
   echo ""
-  echo "Paste your Stripe secret key when asked (it won't show on screen)."
+  echo "Paste the PLATFORM Stripe secret key when asked (it won't show on screen)."
+  echo "This is the No Loss Leads Stripe account, not ALL4PAWS's. ALL4PAWS connects with the button in Settings."
   echo "Find it in Stripe: Developers > API keys > Secret key (starts sk_test_ or sk_live_)."
   firebase functions:secrets:set STRIPE_SECRET --project "$P"
 fi
@@ -33,4 +34,4 @@ echo "== Deploying the payment server"
 firebase deploy --only functions --project "$P" --non-interactive
 
 echo ""
-echo "Done. In the app, open Settings > Integrations, choose Card payments, then click Check connection."
+echo "Done. In the app, open Settings > Integrations > Stripe, add the Connect client ID, save, then click Connect with Stripe."

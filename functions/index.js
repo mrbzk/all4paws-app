@@ -1,11 +1,15 @@
-// ALL4PAWS server functions: Stripe Checkout for deposits, bookings and balances.
+// ALL4PAWS payment server, using Stripe Connect.
+// The business clicks "Connect with Stripe" in Settings, signs in on Stripe's page and allows access.
+// Customers then pay straight into the business's own Stripe account. The business never handles a key.
 // No webhook needed: when a customer returns from Stripe, or when anyone opens the app, the server asks Stripe
-// directly whether open payments went through, then marks the bookings paid.
-// Secret (set once from a terminal, never stored in code or chat):
-//   firebase functions:secrets:set STRIPE_SECRET   (your Stripe secret key, sk_test_... or sk_live_...)
-const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
+// whether open payments went through, then marks the bookings paid.
+//
+// The platform (the software owner) sets its own secret key once, never stored in code or chat:
+//   firebase functions:secrets:set STRIPE_SECRET   (platform account's secret key, sk_test_... or sk_live_...)
+const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
+const crypto = require("crypto");
 
 admin.initializeApp();
 const db = admin.firestore();
@@ -13,6 +17,9 @@ const REGION = "europe-west2";
 const STRIPE_SECRET = defineSecret("STRIPE_SECRET");
 const stripeFor = () => require("stripe")(STRIPE_SECRET.value());
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
+const ACCOUNT_DOC = "stripe/account"; // the connected Stripe account (server-only)
+const ORIGINS = ["https://all4pawz-7d3f7.web.app", "https://all4pawz-7d3f7.firebaseapp.com", "http://localhost:8765"];
+const originOf = req => { const o = req.rawRequest.headers.origin || ""; return ORIGINS.includes(o) ? o : ORIGINS[0]; };
 
 async function isStaff(auth) {
   if (!auth) return false;
@@ -21,25 +28,70 @@ async function isStaff(auth) {
   const confirmed = auth.token.email_verified === true || (auth.token.firebase && auth.token.firebase.sign_in_provider === "google.com");
   return !!(d.staffUids && d.staffUids[auth.uid]) || (confirmed && (d.emails || []).map(x => String(x).toLowerCase()).includes(email));
 }
-
+async function requireStaff(auth) { if (!(await isStaff(auth))) throw new HttpsError("permission-denied", "Staff only."); }
+async function mainCfg() { return (await db.doc("config/main").get()).data() || {}; }
+async function connected() { const d = await db.doc(ACCOUNT_DOC).get(); return d.exists && d.data().accountId ? d.data() : null; }
 function depositFor(price, st) {
   if (st.depositType === "percent") return round2((Number(price) || 0) * (Number(st.depositValue) || 0) / 100);
   return round2(Math.min(Number(st.depositValue) || 0, Number(price) || 0));
 }
+const keyMode = () => { let k = ""; try { k = STRIPE_SECRET.value() || ""; } catch (e) {} return !k ? "" : /_live_/.test(k) ? "live" : "test"; };
 
-// Staff: is Stripe connected, and to which account (test or live)?
-exports.stripeStatus = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
-  if (!(await isStaff(req.auth))) throw new HttpsError("permission-denied", "Staff only.");
-  let key = "";
-  try { key = STRIPE_SECRET.value(); } catch (e) { key = ""; }
-  if (!key) return { connected: false, reason: "No Stripe key set" };
-  try {
-    const acct = await stripeFor().accounts.retrieve();
-    return { connected: true, live: key.startsWith("sk_live_") || key.startsWith("rk_live_"), account: acct.settings && acct.settings.dashboard && acct.settings.dashboard.display_name || acct.business_profile && acct.business_profile.name || acct.id };
-  } catch (e) {
-    return { connected: false, reason: e.message || "Stripe rejected the key" };
-  }
+// ---------- Connect with Stripe ----------
+
+// Staff: start connecting. Returns Stripe's sign-in page to send the browser to.
+exports.stripeConnectStart = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
+  await requireStaff(req.auth);
+  if (!keyMode()) throw new HttpsError("failed-precondition", "The payment server has no platform key yet.");
+  const cfg = await mainCfg(); const clientId = String((cfg.stripe || {}).clientId || "");
+  if (!/^ca_[A-Za-z0-9]+$/.test(clientId)) throw new HttpsError("failed-precondition", "Add the platform's Connect client ID in Settings first.");
+  const state = crypto.randomBytes(24).toString("hex");
+  await db.doc("stripe/state_" + req.auth.uid).set({ state, at: Date.now() });
+  const q = new URLSearchParams({ response_type: "code", client_id: clientId, scope: "read_write", state, redirect_uri: originOf(req) + "/admin" });
+  if (cfg.businessName) q.set("stripe_user[business_name]", cfg.businessName);
+  q.set("stripe_user[country]", "GB");
+  return { url: "https://connect.stripe.com/oauth/authorize?" + q.toString() };
 });
+
+// Staff: finish connecting after Stripe sends the browser back with a code.
+exports.stripeConnectFinish = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
+  await requireStaff(req.auth);
+  const code = String((req.data || {}).code || ""); const state = String((req.data || {}).state || "");
+  const ref = db.doc("stripe/state_" + req.auth.uid); const saved = (await ref.get()).data();
+  await ref.delete().catch(() => {});
+  if (!saved || !state || saved.state !== state || Date.now() - saved.at > 20 * 60 * 1000) throw new HttpsError("permission-denied", "That sign-in link expired. Click Connect with Stripe again.");
+  if (!/^ac_[A-Za-z0-9]+$/.test(code)) throw new HttpsError("invalid-argument", "Stripe didn't send a valid sign-in code.");
+  const stripe = stripeFor();
+  let tok;
+  try { tok = await stripe.oauth.token({ grant_type: "authorization_code", code }); }
+  catch (e) { throw new HttpsError("failed-precondition", e.message || "Stripe refused the connection."); }
+  let name = tok.stripe_user_id;
+  try { const a = await stripe.accounts.retrieve(tok.stripe_user_id); name = (a.settings && a.settings.dashboard && a.settings.dashboard.display_name) || (a.business_profile && a.business_profile.name) || a.email || a.id; } catch (e) {}
+  await db.doc(ACCOUNT_DOC).set({ accountId: tok.stripe_user_id, name, live: !!tok.livemode, connectedAt: new Date().toISOString(), connectedBy: req.auth.token.email || req.auth.uid });
+  return { connected: true, account: name, live: !!tok.livemode };
+});
+
+// Staff: disconnect the Stripe account.
+exports.stripeDisconnect = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
+  await requireStaff(req.auth);
+  const acct = await connected(); const clientId = ((await mainCfg()).stripe || {}).clientId;
+  if (acct && clientId) { try { await stripeFor().oauth.deauthorize({ client_id: clientId, stripe_user_id: acct.accountId }); } catch (e) {} }
+  await db.doc(ACCOUNT_DOC).delete();
+  return { connected: false };
+});
+
+// Staff: what is connected?
+exports.stripeStatus = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
+  await requireStaff(req.auth);
+  const mode = keyMode();
+  if (!mode) return { connected: false, server: false, reason: "The payment server has no platform key yet." };
+  const acct = await connected();
+  if (!acct) return { connected: false, server: true, live: mode === "live" };
+  if (acct.live !== (mode === "live")) return { connected: false, server: true, live: mode === "live", reason: "Stripe was connected in " + (acct.live ? "live" : "test") + " mode but the server is now in " + mode + " mode. Disconnect, then connect again." };
+  return { connected: true, server: true, live: acct.live, account: acct.name };
+});
+
+// ---------- Payments ----------
 
 // Customer: start a Stripe Checkout for a deposit, one booking, or everything they owe.
 exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
@@ -48,9 +100,9 @@ exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, as
   const bookingId = String((req.data || {}).bookingId || "");
   if (!["deposit", "booking", "balance"].includes(kind)) throw new HttpsError("invalid-argument", "Unknown payment type.");
 
-  const cfg = (await db.doc("config/main").get()).data() || {};
-  const st = cfg.stripe || {};
-  if (st.mode !== "checkout") throw new HttpsError("failed-precondition", "Card payments aren't switched on yet.");
+  const cfg = await mainCfg(); const st = cfg.stripe || {};
+  const acct = await connected();
+  if (st.mode !== "checkout" || !acct) throw new HttpsError("failed-precondition", "Card payments aren't switched on yet.");
 
   const found = await db.collection("clients").where("uid", "==", req.auth.uid).limit(1).get();
   if (found.empty) throw new HttpsError("failed-precondition", "Finish setting up your account first.");
@@ -78,19 +130,20 @@ exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, as
   const pence = Math.round(amount * 100);
   if (pence < 30) throw new HttpsError("failed-precondition", "There's nothing to pay right now.");
 
-  const origin = /^https:\/\/[a-z0-9.-]+$/i.test(req.rawRequest.headers.origin || "") ? req.rawRequest.headers.origin : "https://all4pawz-7d3f7.web.app";
+  const origin = originOf(req); const biz = cfg.businessName || "ALL4PAWS";
   const metadata = { clientId: client.id, kind, bookingIds: ids.join(",").slice(0, 490) };
+  // A direct charge on the business's own connected Stripe account: the money goes to them.
   const session = await stripeFor().checkout.sessions.create({
     mode: "payment",
     customer_email: client.email || undefined,
     client_reference_id: client.id,
-    line_items: [{ quantity: 1, price_data: { currency: "gbp", unit_amount: pence, product_data: { name: (cfg.businessName || "ALL4PAWS") + " " + label.toLowerCase() } } }],
+    line_items: [{ quantity: 1, price_data: { currency: "gbp", unit_amount: pence, product_data: { name: biz + " " + label.toLowerCase() } } }],
     metadata,
-    payment_intent_data: { metadata, description: (cfg.businessName || "ALL4PAWS") + " " + label.toLowerCase() + " for " + client.name },
+    payment_intent_data: { metadata, description: biz + " " + label.toLowerCase() + " for " + client.name },
     success_url: origin + "/portal?paid=1&cs={CHECKOUT_SESSION_ID}",
     cancel_url: origin + "/portal?paid=0"
-  });
-  await db.doc("checkouts/" + session.id).set({ clientId: client.id, kind, bookingIds: ids, amount, status: "open", createdAt: new Date().toISOString() });
+  }, { stripeAccount: acct.accountId });
+  await db.doc("checkouts/" + session.id).set({ clientId: client.id, kind, bookingIds: ids, amount, accountId: acct.accountId, status: "open", createdAt: new Date().toISOString() });
   return { url: session.url };
 });
 
@@ -131,7 +184,7 @@ exports.confirmCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, a
     if (mine && c.clientId !== mine) continue;
     if (c.status !== "open") { if (c.status === "paid" && want) paid++; continue; }
     let s;
-    try { s = await stripe.checkout.sessions.retrieve(d.id); } catch (e) { continue; }
+    try { s = await stripe.checkout.sessions.retrieve(d.id, {}, c.accountId ? { stripeAccount: c.accountId } : undefined); } catch (e) { continue; }
     if (s.payment_status === "paid" || s.payment_status === "no_payment_required") {
       await applyPaid(s, s.livemode); await d.ref.update({ status: "paid", checkedAt: new Date().toISOString() }); paid++;
     } else if (s.status === "expired") {

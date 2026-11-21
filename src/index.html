@@ -999,7 +999,7 @@ async function boot() {
     try { const r = await fetch("/__/firebase/init.json", { cache: "no-store" }); if (r.ok) { const j = await r.json(); if (j && j.projectId) window.FIREBASE_CONFIG = Object.assign(j, window.FIREBASE_EXTRA || {}); } } catch (e) {}
   }
   if (!cap && window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.projectId) {
-    try { const fb = await firebaseBackend(window.FIREBASE_CONFIG); cap = fb.db; S.fb = fb; S.assets = fb.assets; paidReturn(); }
+    try { const fb = await firebaseBackend(window.FIREBASE_CONFIG); cap = fb.db; S.fb = fb; S.assets = fb.assets; paidReturn(); stripeConnectReturn(); }
     catch (e) { console.warn("Firebase", e); S.netNote = "Couldn't connect to the database, so this is showing sample data."; }
   }
   if (!cap) { startDemo(); return; }
@@ -1030,7 +1030,7 @@ async function boot() {
 // deposits on Stripe's own page. A full live connection (automatic sync, paid status coming back) needs a small
 // server (Firebase Functions on the Blaze plan) and can be added later.
 const XERO_DEFAULT = { enabled: true, accountCode: "200", taxType: "No VAT", prefix: "A4P-", dueDays: 14 };
-const STRIPE_DEFAULT = { mode: "links", depositType: "fixed", depositValue: 20, depositLink: "", depositLabel: "", depositFor: "boarding", payLink: "" };
+const STRIPE_DEFAULT = { clientId: "", mode: "links", depositType: "fixed", depositValue: 20, depositLink: "", depositLabel: "", depositFor: "boarding", payLink: "" };
 const owedOf = b => Math.max(0, Math.round(((Number(b.price) || 0) - (Number(b.depositPaid) || 0)) * 100) / 100);
 const XERO_TAX = ["No VAT", "20% (VAT on Income)", "5% (VAT on Income)", "Zero Rated Income", "Exempt Income"];
 const XERO_COLS = ["*ContactName", "EmailAddress", "POAddressLine1", "POAddressLine2", "POAddressLine3", "POAddressLine4", "POCity", "PORegion", "POPostalCode", "POCountry", "*InvoiceNumber", "Reference", "*InvoiceDate", "*DueDate", "InventoryItemCode", "*Description", "*Quantity", "*UnitAmount", "Discount", "*AccountCode", "*TaxType", "TrackingName1", "TrackingOption1", "TrackingName2", "TrackingOption2", "Currency", "BrandingTheme"];
@@ -1089,6 +1089,27 @@ async function payByCard(kind, bookingId, btn) {
   try { const r = await callFn("createCheckout", { kind, bookingId: bookingId || "" }); if (r && r.url) { location.href = r.url; return; } throw new Error("No payment page came back."); }
   catch (e) { if (btn) { btn.disabled = false; btn.textContent = "Try again"; } toast((e && e.message) || "Card payment isn't available right now. You can pay by bank transfer."); }
 }
+async function loadStripeStatus() {
+  if (S.stripeLoading) return; S.stripeLoading = true;
+  try { S.stripeStatus = await callFn("stripeStatus"); }
+  catch (e) { S.stripeStatus = { connected: false, err: true, reason: /not-found|internal|unavailable/i.test((e && e.code) || "") ? "The payment server isn't set up yet." : (e && e.message) || "Couldn't reach the payment server." }; }
+  S.stripeLoading = false; render();
+}
+async function stripeConnectReturn() {
+  const q = new URLSearchParams(location.search);
+  if (!q.has("state") || !(q.has("code") || q.has("error"))) return;
+  const code = q.get("code") || "", state = q.get("state") || "", err = q.get("error_description") || q.get("error") || "";
+  ["code", "state", "scope", "error", "error_description"].forEach(k => q.delete(k));
+  try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {}
+  if (err) { setTimeout(() => toast(/denied/i.test(err) ? "Stripe connection cancelled." : "Stripe said: " + err), 600); return; }
+  try { if (FB_AUTH && FB_AUTH.auth.authStateReady) await FB_AUTH.auth.authStateReady(); } catch (e) {}
+  for (let i = 0; i < 40 && !S.canAdmin; i++) await new Promise(r => setTimeout(r, 250));
+  if (!S.canAdmin) { toast("Sign in to the back office, then click Connect with Stripe again."); return; }
+  toast("Finishing the Stripe connection...");
+  try { const r = await callFn("stripeConnectFinish", { code, state }); S.stripeStatus = r; toast("Stripe connected" + (r && r.account ? " to " + r.account : "") + "."); }
+  catch (e) { toast((e && e.message) || "Couldn't finish connecting Stripe."); S.stripeStatus = undefined; }
+  S.adminTab = "settings"; S.setTab = "integrations"; render();
+}
 async function paidReturn() {
   const q = new URLSearchParams(location.search); const back = q.has("paid"); const ok = q.get("paid") === "1"; const cs = q.get("cs") || "";
   if (back) { q.delete("paid"); q.delete("cs"); try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {} }
@@ -1113,16 +1134,24 @@ function integrationsCards(sec) {
     '<details class="howto"><summary>How to import it into Xero</summary><ol class="small"><li>In Xero, go to <strong>Business &gt; Invoices</strong>.</li><li>Click <strong>Import</strong>, choose the file you downloaded, and press Import.</li><li>Check the draft invoices, then approve and send them from Xero.</li></ol><p class="small muted">Exported work is marked, so it won\'t be exported twice. When a customer pays, mark the visit paid in Money.</p></details>' +
     '<form class="stack" data-form="xero-settings"><label class="opt"><input type="checkbox" name="enabled"' + (x.enabled ? " checked" : "") + '><span><strong>Use Xero export</strong>. Shows an Export to Xero button on the Money page.</span></label><div class="grid2"><div class="field"><label for="xr-acc">Sales account code</label><input type="text" id="xr-acc" name="accountCode" value="' + esc(x.accountCode) + '"><span class="hint">Usually 200 (Sales) in Xero.</span></div><div class="field"><label for="xr-tax">Tax rate</label><select id="xr-tax" name="taxType">' + XERO_TAX.map(t => "<option" + (t === x.taxType ? " selected" : "") + ">" + esc(t) + "</option>").join("") + '</select></div><div class="field"><label for="xr-pre">Invoice number starts with</label><input type="text" id="xr-pre" name="prefix" value="' + esc(x.prefix) + '"></div><div class="field"><label for="xr-due">Payment due after (days)</label><input type="number" id="xr-due" name="dueDays" min="0" max="90" value="' + esc(x.dueDays) + '"></div></div><div class="row"><button class="btn" type="submit">Save Xero settings</button></div></form></section>';
   const live = !!S.fb; const ss = S.stripeStatus; const chk = st.mode === "checkout";
-  const pillCls = chk ? (ss ? (ss.connected ? "ok" : "unpaid") : "requested") : (st.depositLink || st.payLink ? "ok" : "requested");
-  const pillTxt = chk ? (ss ? (ss.connected ? (ss.live ? "Live" : "Test mode") : "Not connected") : "Card payments on") : (st.depositLink || st.payLink ? "Payment Links" : "Not set up");
+  if (live && S.canAdmin && sec === "integrations" && ss === undefined && !S.stripeLoading) setTimeout(loadStripeStatus, 0);
+  const pillCls = ss && ss.connected ? "ok" : chk ? "requested" : (st.mode === "links" && (st.depositLink || st.payLink) ? "ok" : "requested");
+  const pillTxt = ss && ss.connected ? (ss.live ? "Connected" : "Connected (test)") : chk ? "Not connected" : (st.mode === "links" && (st.depositLink || st.payLink) ? "Payment Links" : "Not set up");
   const sel = (n, v, opts) => '<select id="st-' + n + '" name="' + n + '">' + opts.map(o => '<option value="' + o[0] + '"' + (String(v) === o[0] ? " selected" : "") + ">" + o[1] + "</option>").join("") + "</select>";
-  h += '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Stripe</h3><p class="small muted">Take card payments and deposits. Customers pay on Stripe\'s secure page and the money goes to your Stripe account. With card payments on, bookings are marked paid automatically.</p></div><span class="pill ' + pillCls + '">' + pillTxt + "</span></div>" +
-    (chk && ss ? '<p class="small ' + (ss.connected ? "muted" : "") + '">' + (ss.connected ? "Connected to " + esc(ss.account || "your Stripe account") + (ss.live ? ". Real cards are charged." : ". Test mode: use Stripe test cards, no real money moves.") : esc(ss.reason || "Not connected.")) + "</p>" : "") +
-    '<form class="stack" data-form="stripe-settings"><div class="field"><label for="st-mode">How customers pay by card</label>' + sel("mode", st.mode, [["checkout", "Card payments (amount filled in, marked paid automatically)"], ["links", "Payment Links (customer types the amount, you mark paid)"], ["off", "Off"]]) + '<span class="hint">Card payments need the payment server set up once. Until then, use Payment Links.</span></div>' +
+  let conn;
+  if (!live) conn = '<p class="small muted">Connect with Stripe works on the live site.</p>';
+  else if (ss === undefined || S.stripeLoading) conn = '<p class="small muted">Checking Stripe...</p>';
+  else if (ss.connected) conn = '<div class="row" style="justify-content:space-between;align-items:center"><p class="small"><strong>Connected to ' + esc(ss.account || "your Stripe account") + '.</strong> ' + (ss.live ? "Real cards are charged and the money goes to this account." : "Test mode: use Stripe test cards, no real money moves.") + '</p><button class="btn sm ghost danger" type="button" data-act="stripe-disconnect">Disconnect</button></div>';
+  else if (ss.server === false || ss.err) conn = '<p class="small muted">' + esc(ss.reason || "The payment server isn't set up yet.") + "</p>";
+  else conn = (ss.reason ? '<p class="small">' + esc(ss.reason) + "</p>" : "") + '<div class="row"><button class="btn primary" type="button" data-act="stripe-connect"' + (st.clientId ? "" : " disabled") + '>Connect with Stripe</button></div><p class="small muted">' + (st.clientId ? "You'll sign in on Stripe's page and click Allow. No keys to copy." : "Add the platform client ID under Platform setup below first.") + (ss.live ? "" : " Test mode is on, so Stripe will connect a test account.") + "</p>";
+  h += '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Stripe</h3><p class="small muted">Take card payments and deposits. Customers pay on Stripe\'s secure page and the money goes straight to your own Stripe account. Bookings are marked paid automatically.</p></div><span class="pill ' + pillCls + '">' + pillTxt + "</span></div>" + conn +
+    '<form class="stack" data-form="stripe-settings"><div class="field"><label for="st-mode">How customers pay by card</label>' + sel("mode", st.mode, [["checkout", "Card payments through your connected Stripe account"], ["links", "Payment Links (customer types the amount, you mark paid)"], ["off", "Off"]]) + '<span class="hint">Card payments start working once Stripe is connected.</span></div>' +
     '<div class="grid2"><div class="field"><label for="st-depositFor">Ask for a deposit on</label>' + sel("depositFor", st.depositFor, [["boarding", "Overnight stays only"], ["all", "Every booking"], ["none", "No deposits"]]) + '</div><div class="field"><label for="st-depositType">Deposit is</label>' + sel("depositType", st.depositType, [["fixed", "A fixed amount (£)"], ["percent", "A percentage of the booking"]]) + '</div></div>' +
-    '<div class="field"><label for="st-dv">Deposit amount</label><input type="number" id="st-dv" name="depositValue" min="0" step="0.01" value="' + esc(st.depositValue) + '"><span class="hint">Pounds, or percent if you picked a percentage. Used for card payments.</span></div>' +
+    '<div class="field"><label for="st-dv">Deposit amount</label><input type="number" id="st-dv" name="depositValue" min="0" step="0.01" value="' + esc(st.depositValue) + '"><span class="hint">Pounds, or percent if you picked a percentage.</span></div>' +
     '<details class="stack"><summary class="small">Payment Links (if card payments aren\'t set up)</summary><div class="field"><label for="st-dep">Deposit payment link</label><input type="url" id="st-dep" name="depositLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.depositLink) + '"></div><div class="field"><label for="st-lbl">Deposit amount shown to customers</label><input type="text" id="st-lbl" name="depositLabel" placeholder="£20" value="' + esc(st.depositLabel) + '"></div><div class="field"><label for="st-pay">Pay-a-bill link (customer enters the amount)</label><input type="url" id="st-pay" name="payLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.payLink) + '"></div></details>' +
-    '<p class="small muted">Never paste a Stripe secret key here. The key is added once on the server and never appears in the app.</p><div class="row"><button class="btn" type="submit">Save Stripe settings</button>' + (chk && live ? '<button class="btn ghost" type="button" data-act="stripe-check">Check connection</button>' : "") + "</div></form></section>";
+    '<details class="stack"' + (st.clientId ? "" : " open") + '><summary class="small">Platform setup (done once by the software owner)</summary><div class="field"><label for="st-cid">Connect client ID</label><input type="text" id="st-cid" name="clientId" placeholder="ca_..." value="' + esc(st.clientId) + '" autocomplete="off" spellcheck="false"><span class="hint">From the platform Stripe account: Settings, Connect, Onboarding options, OAuth. It\'s a public ID, not a secret key.</span></div></details>' +
+    '<p class="small muted">Never paste a Stripe secret key into the app.</p><div class="row"><button class="btn" type="submit">Save Stripe settings</button></div></form></section>';
+
   return h;
 }
 
@@ -2218,11 +2247,18 @@ async function handleClick(e) {
     case "book-again": S.done = null; render(); break;
     case "pay-deposit": await payByCard("deposit", id, el); break;
     case "pay-balance": await payByCard("balance", "", el); break;
-    case "stripe-check": {
-      el.disabled = true; el.textContent = "Checking...";
-      try { const r = await callFn("stripeStatus"); S.stripeStatus = r; } catch (e) { S.stripeStatus = { connected: false, reason: /not-found|internal|unavailable/i.test((e && e.code) || "") ? "The payment server isn't deployed yet." : (e && e.message) || "Couldn't reach the payment server." }; }
-      render(); break;
+    case "stripe-connect": {
+      el.disabled = true; el.textContent = "Opening Stripe...";
+      try { const r = await callFn("stripeConnectStart"); if (r && r.url) { location.href = r.url; break; } throw new Error("Stripe didn't respond."); }
+      catch (e) { el.disabled = false; el.textContent = "Connect with Stripe"; toast((e && e.message) || "Couldn't open Stripe."); }
+      break;
     }
+    case "stripe-disconnect": {
+      if (!confirm("Disconnect Stripe? Customers won't be able to pay by card until you connect again.")) break;
+      try { await callFn("stripeDisconnect"); S.stripeStatus = undefined; toast("Stripe disconnected"); render(); } catch (e) { toast((e && e.message) || "Couldn't disconnect."); }
+      break;
+    }
+
     case "submit-booking": await submitBooking(); break;
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
@@ -2366,7 +2402,9 @@ async function handleSubmit(e) {
     const mode = ["checkout", "links", "off"].includes(fd.get("mode")) ? fd.get("mode") : "links";
     const dType = fd.get("depositType") === "percent" ? "percent" : "fixed";
     const dVal = Math.max(0, Math.min(dType === "percent" ? 100 : 5000, Math.round((Number(fd.get("depositValue")) || 0) * 100) / 100));
-    const st = { mode, depositType: dType, depositValue: dVal, depositLink: String(fd.get("depositLink") || "").trim(), depositLabel: String(fd.get("depositLabel") || "").trim().slice(0, 30), depositFor: String(fd.get("depositFor") || "boarding"), payLink: String(fd.get("payLink") || "").trim() };
+    const clientId = String(fd.get("clientId") || "").trim();
+    if (clientId && !/^ca_[A-Za-z0-9]+$/.test(clientId)) { toast("The client ID starts with ca_. Don't paste a secret key here."); return; }
+    const st = { clientId, mode, depositType: dType, depositValue: dVal, depositLink: String(fd.get("depositLink") || "").trim(), depositLabel: String(fd.get("depositLabel") || "").trim().slice(0, 30), depositFor: String(fd.get("depositFor") || "boarding"), payLink: String(fd.get("payLink") || "").trim() };
     if (!okStripeLink(st.depositLink) || !okStripeLink(st.payLink)) { toast("Paste the Payment Link from Stripe. It starts with https://buy.stripe.com/"); return; }
     try { await putCfg(Object.assign({}, S.cfg || {}, { stripe: st })); forget(e.target); toast("Stripe settings saved"); } catch (err) {}
     return;
