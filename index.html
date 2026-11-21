@@ -205,7 +205,10 @@ footer{padding:30px 0 50px;color:var(--muted);font-size:.875rem;border-top:1px s
 .admin{display:grid;grid-template-columns:210px 1fr;gap:22px;padding:24px 0 50px;align-items:start}
 @media (max-width:860px){.admin{grid-template-columns:1fr}}
 .side{display:flex;flex-direction:column;gap:2px;position:sticky;top:80px}
-@media (max-width:860px){.side{position:static;flex-direction:row;flex-wrap:wrap}}
+.side .lbl-row{display:flex;align-items:center;gap:8px;flex-wrap:nowrap}
+.side .lbl-row svg{width:18px;height:18px;flex:none}
+.side .more,.more-sheet,.more-back{display:none}
+
 .side button{all:unset;cursor:pointer;padding:9px 12px;border-radius:8px;font-weight:600;color:var(--muted);display:flex;justify-content:space-between;gap:8px}
 .side button:hover{background:var(--surface-2);color:var(--ink)}
 .side button[aria-current="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
@@ -366,9 +369,23 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
   footer{margin-top:10px}
   /* admin tabs: one swipeable row */
   .admin{padding-top:0;gap:14px}
-  .side{flex-direction:row;flex-wrap:nowrap;overflow-x:auto;position:sticky;top:54px;z-index:15;background:var(--bg);margin:0 -16px;padding:8px 16px;scrollbar-width:none;border-bottom:1px solid var(--line)}
-  .side::-webkit-scrollbar{display:none}
-  .side button{white-space:nowrap;flex:none;min-height:40px;align-items:center}
+  /* admin menu: app-style tab bar at the bottom, like the customer side */
+  .side{position:fixed;left:0;right:0;bottom:0;top:auto;z-index:40;margin:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;background:var(--surface);border-top:1px solid var(--line);border-bottom:0;padding:4px 4px calc(4px + env(safe-area-inset-bottom));overflow:visible;box-shadow:0 -4px 16px rgba(0,0,0,.05)}
+  .side button{position:relative;flex-direction:column;align-items:center;justify-content:center;gap:2px;font-size:.72rem;line-height:1.1;min-height:54px;padding:6px 2px;border-radius:10px;white-space:nowrap;text-align:center;min-width:0}
+  .side .lbl-row{flex-direction:column;gap:3px}
+  .side .lbl-row svg{width:22px;height:22px}
+  .side .side-extra{display:none}
+  .side .more{display:flex}
+  .side button[aria-current="true"]{background:var(--surface-2);color:var(--accent);box-shadow:none}
+  .side .badge,.side .cnt-side{position:absolute;top:3px;left:calc(50% + 6px);font-size:.62rem;padding:0 5px;line-height:1.5;border:0}
+  .side .cnt-side{background:var(--accent);color:#fff}
+  .more-back{position:fixed;inset:0;background:rgba(0,0,0,.28);z-index:41}
+  .more-sheet{display:flex;flex-direction:column;position:fixed;left:10px;right:10px;bottom:calc(70px + env(safe-area-inset-bottom));z-index:42;background:var(--surface);border-radius:14px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:6px}
+  .more-sheet button{all:unset;cursor:pointer;display:flex;gap:12px;align-items:center;padding:14px;border-radius:10px;font-weight:600}
+  .more-sheet button:hover,.more-sheet button:focus-visible{background:var(--surface-2)}
+  .more-sheet .danger{color:var(--bad)}
+  .more-sheet svg{width:20px;height:20px;flex:none}
+  .more-back{display:block}
   .kpis{grid-template-columns:repeat(2,minmax(0,1fr))}
   .kpi .v{font-size:1.4rem}
   .card{padding:16px}
@@ -490,6 +507,7 @@ td.act .row > *{text-align:center;justify-content:center}
 .side .cnt-side{font-size:.8rem;font-weight:700;color:var(--muted);border:1px solid var(--line);border-radius:999px;padding:0 7px}
 .side .gear{margin-top:14px;border-top:1px solid var(--line);border-radius:0 0 8px 8px;padding-top:12px}
 .side .signout:hover{color:var(--bad)}
+@media (min-width:641px) and (max-width:860px){.admin .side{position:sticky;top:62px;z-index:15;background:var(--bg);flex-direction:row;flex-wrap:nowrap;overflow-x:auto;gap:2px;padding:8px 0;border-bottom:1px solid var(--line);scrollbar-width:none;align-items:center}.admin .side::-webkit-scrollbar{display:none}.admin .side button{white-space:nowrap;flex:none;align-items:center;padding:8px 10px}.admin .side .gear{margin:0 0 0 auto;border:0;padding:8px 10px;border-radius:8px}}
 .next-card{display:flex;flex-direction:column;gap:10px;border:2px solid var(--accent);border-radius:14px;padding:14px;background:var(--surface)}
 .next-card .visit{border:0;padding:0;border-left:0;background:transparent}
 .next-time{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
@@ -1892,6 +1910,16 @@ function petCard(p, t, admin) {
 const GROUPS = [["today", "Today", ["today"]], ["diary", "Diary", ["schedule", "bookings", "kennel", "approvals"]], ["customers", "Customers", ["clients"]], ["money", "Money", ["billing"]], ["messages", "Messages", ["messages"]]];
 const SUB_LABEL = { schedule: "Week", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
 function groupOf(tab) { for (const g of GROUPS) if (g[2].includes(tab)) return g[0]; return tab === "settings" ? "settings" : "today"; }
+const ADM_IC = (d) => '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
+const GROUP_IC = {
+  today: ADM_IC('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
+  diary: ADM_IC('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
+  customers: ADM_IC('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>'),
+  money: ADM_IC('<path d="M17 6.5A4.5 4.5 0 0 0 9 9.5V20h9M6 13h8M6 20h3"/>'),
+  messages: ADM_IC('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
+  more: ADM_IC('<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'),
+  site: ADM_IC('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>')
+};
 const IC_OUT = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 const IC_GEAR = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
 function viewAdmin() {
@@ -1908,9 +1936,10 @@ function viewAdmin() {
   else body = adminSettings();
   const grp = GROUPS.find(x => x[0] === g);
   const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "messages" ? unreadForTeam() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
-  const side = GROUPS.map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + "><span>" + l + "</span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && unreadForTeam() && !quiet ? '<span class="cnt-side num" title="Unread messages">' + unreadForTeam() + "</span>" : "") + "</button>").join("") + '<button class="gear" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="row" style="gap:6px;flex-wrap:nowrap">' + IC_GEAR + "<span>Settings</span></span></button>";
-  const out = '<button class="signout" data-act="staff-signout" aria-label="Sign out"><span class="row" style="gap:6px;flex-wrap:nowrap">' + IC_OUT + "<span>Sign out</span></span></button>";
-  return '<div class="wrap"><div class="admin"><nav class="side" aria-label="Back office">' + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>";
+  const side = GROUPS.map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && unreadForTeam() && !quiet ? '<span class="cnt-side num" title="Unread messages">' + unreadForTeam() + "</span>" : "") + "</button>").join("") + '<button class="gear side-extra" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
+  const moreSheet = S.moreOpen ? '<div class="more-back" data-act="admin-more"></div><div class="more-sheet" role="menu"><button role="menuitem" data-act="tab" data-id="settings">' + IC_GEAR + "<span>Settings</span></button><button role=\"menuitem\" data-act=\"admin-site\">" + GROUP_IC.site + '<span>View site</span></button><button role="menuitem" class="danger" data-act="staff-signout">' + IC_OUT + "<span>Sign out</span></button></div>" : "";
+  const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
+  return '<div class="wrap"><div class="admin"><nav class="side" aria-label="Back office">' + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
 }
 function actionsFor(b) {
   const a = [];
@@ -2283,10 +2312,12 @@ async function handleClick(e) {
     case "go-back": if (S.navCount > 1) history.back(); else navTo("home"); break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; navTo("portal"); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
-    case "staff-signout": ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
+    case "staff-signout": S.moreOpen = false; ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
-    case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo(0, 0); break;
+    case "admin-more": S.moreOpen = !S.moreOpen; render(); break;
+    case "admin-site": S.moreOpen = false; navTo("home"); render(); break;
+    case "tab": S.moreOpen = false; S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo(0, 0); break;
     case "bfilter": S.bFilter = id; render(); break;
     case "approve": await patchBooking(id, { status: "confirmed" }); toast("Confirmed"); break;
     case "decline": await patchBooking(id, { status: "declined" }); toast("Declined"); break;
