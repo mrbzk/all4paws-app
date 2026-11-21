@@ -1058,7 +1058,7 @@ async function handleAuth(user) {
       if (free) { await db.doc("clients/" + free.id).update({ uid: user.uid }); free.uid = user.uid; mine = free; }
     } catch (e) { console.warn("link", e); }
   }
-  if (!mine) { S.needsProfile = true; if (view() !== "portal") location.hash = "portal"; render(); return; }
+  if (!mine) { S.needsProfile = true; if (view() !== "portal" && view() !== "admin") location.hash = "portal"; render(); return; }
   S.me = mine.id; S.clients = [mine];
   keep(db.doc("clients/" + mine.id).onSnapshot(sn => { S.clients = sn.exists ? [Object.assign({ id: sn.id }, sn.data())] : []; render(); }, liveFail));
   keep(db.collection("pets").where("clientId", "==", mine.id).onSnapshot(snap => { S.pets = rowsOf(snap); render(); }, liveFail));
@@ -1612,9 +1612,10 @@ function liveAuthView(forStaff) {
   if (u && S.needsVerify) return wrap('<div class="card stack"><h2>This login isn\'t confirmed yet</h2><p class="muted">' + esc(u.email) + ' was set up with a password but hasn\'t been confirmed, and we\'re not sending emails yet. Sign in with Google using the same email instead. Staff can then add a password in Settings > Team.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && S.canAdmin && !forStaff) return wrap('<div class="card stack"><h2>You\'re signed in as staff</h2><p class="muted">' + esc(u.email) + '</p><div class="row"><a class="btn primary" href="#admin">Go to the back office</a><button class="btn" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p class="muted">' + esc(u.email) + ' isn\'t on the team list. Ask Nicole to add it in Settings > Team, or sign in with your staff account.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button><a class="btn" href="#portal">My account</a></div></div>');
+  if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p>You\'re signed in as <strong>' + esc(u.email) + '</strong>, which isn\'t on the team list.</p><p class="muted small">Sign out and sign in again with your staff email. If this is the right email, ask whoever runs the back office to add it in Settings > Team.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && S.needsProfile) {
     const v = S.profileDraft || {};
-    return wrap('<form class="card stack" data-form="profile"><div><h2>Finish your account</h2><p class="muted">Signed in as ' + esc(u.email) + '. A few details and your dog, and you\'re ready to book.</p></div>' +
+    return wrap('<form class="card stack" data-form="profile"><div><h2>Finish your account</h2><p class="muted">Signed in as <strong>' + esc(u.email) + '</strong>. A few details and your dog, and you\'re ready to book.</p></div>' +
       '<h4>Your details</h4><div class="grid2"><div class="field"><label for="pf-name">Your name</label><input type="text" id="pf-name" name="name" required autocomplete="name" value="' + esc(v.name || u.displayName || S.signupName || "") + '"></div><div class="field"><label for="pf-phone">Mobile number</label><input type="tel" id="pf-phone" name="phone" required autocomplete="tel" value="' + esc(v.phone || "") + '"></div></div>' +
       '<div class="field"><label for="pf-addr">Pick-up address <span class="muted small">(optional)</span></label><input type="text" id="pf-addr" name="address" autocomplete="street-address" value="' + esc(v.address || "") + '"></div>' +
       '<h4>Your dog</h4>' + dogFields({ name: v.dog_name, breed: v.dog_breed, sex: v.dog_sex, age: v.dog_age, neutered: v.dog_neutered, microchip: v.dog_microchip, vet: v.dog_vet, notes: v.dog_notes }, "form", "pf-") +
