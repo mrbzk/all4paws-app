@@ -27,6 +27,14 @@ if ! firebase functions:secrets:access STRIPE_SECRET --project "$P" >/dev/null 2
   firebase functions:secrets:set STRIPE_SECRET --project "$P"
 fi
 
+echo "== Checking the platform Connect client ID"
+if ! grep -q '^STRIPE_CLIENT_ID=ca_' functions/.env 2>/dev/null; then
+  echo "Paste the platform's Connect client ID (starts ca_). It's public, not a secret."
+  echo "Find it in the No Loss Leads Stripe account: Settings > Connect > Onboarding options > OAuth."
+  read -r CID
+  case "$CID" in ca_*) echo "STRIPE_CLIENT_ID=$CID" > functions/.env ;; *) echo "That doesn't start with ca_. Run the script again."; exit 1 ;; esac
+fi
+
 echo "== Installing server packages"
 (cd functions && npm install --omit=dev --no-audit --no-fund)
 
@@ -34,4 +42,4 @@ echo "== Deploying the payment server"
 firebase deploy --only functions --project "$P" --non-interactive
 
 echo ""
-echo "Done. In the app, open Settings > Integrations > Stripe, add the Connect client ID, save, then click Connect with Stripe."
+echo "Done. In the app, open Settings > Integrations > Stripe, choose Card payments, save, then click Connect with Stripe."

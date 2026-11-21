@@ -4,8 +4,9 @@
 // No webhook needed: when a customer returns from Stripe, or when anyone opens the app, the server asks Stripe
 // whether open payments went through, then marks the bookings paid.
 //
-// The platform (the software owner) sets its own secret key once, never stored in code or chat:
+// The platform (the software owner) sets up once:
 //   firebase functions:secrets:set STRIPE_SECRET   (platform account's secret key, sk_test_... or sk_live_...)
+//   functions/.env: STRIPE_CLIENT_ID=ca_...         (the platform's public Connect client ID; deploy-functions.sh asks for it)
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -35,6 +36,7 @@ function depositFor(price, st) {
   if (st.depositType === "percent") return round2((Number(price) || 0) * (Number(st.depositValue) || 0) / 100);
   return round2(Math.min(Number(st.depositValue) || 0, Number(price) || 0));
 }
+const CLIENT_ID = () => /^ca_[A-Za-z0-9]+$/.test(process.env.STRIPE_CLIENT_ID || "") ? process.env.STRIPE_CLIENT_ID : "";
 const keyMode = () => { let k = ""; try { k = STRIPE_SECRET.value() || ""; } catch (e) {} return !k ? "" : /_live_/.test(k) ? "live" : "test"; };
 
 // ---------- Connect with Stripe ----------
@@ -43,8 +45,8 @@ const keyMode = () => { let k = ""; try { k = STRIPE_SECRET.value() || ""; } cat
 exports.stripeConnectStart = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
   await requireStaff(req.auth);
   if (!keyMode()) throw new HttpsError("failed-precondition", "The payment server has no platform key yet.");
-  const cfg = await mainCfg(); const clientId = String((cfg.stripe || {}).clientId || "");
-  if (!/^ca_[A-Za-z0-9]+$/.test(clientId)) throw new HttpsError("failed-precondition", "Add the platform's Connect client ID in Settings first.");
+  const cfg = await mainCfg(); const clientId = CLIENT_ID();
+  if (!clientId) throw new HttpsError("failed-precondition", "The payment server is missing its Connect client ID.");
   const state = crypto.randomBytes(24).toString("hex");
   await db.doc("stripe/state_" + req.auth.uid).set({ state, at: Date.now() });
   const q = new URLSearchParams({ response_type: "code", client_id: clientId, scope: "read_write", state, redirect_uri: originOf(req) + "/admin" });
@@ -74,7 +76,7 @@ exports.stripeConnectFinish = onCall({ region: REGION, secrets: [STRIPE_SECRET] 
 // Staff: disconnect the Stripe account.
 exports.stripeDisconnect = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
   await requireStaff(req.auth);
-  const acct = await connected(); const clientId = ((await mainCfg()).stripe || {}).clientId;
+  const acct = await connected(); const clientId = CLIENT_ID();
   if (acct && clientId) { try { await stripeFor().oauth.deauthorize({ client_id: clientId, stripe_user_id: acct.accountId }); } catch (e) {} }
   await db.doc(ACCOUNT_DOC).delete();
   return { connected: false };
@@ -85,6 +87,7 @@ exports.stripeStatus = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, asyn
   await requireStaff(req.auth);
   const mode = keyMode();
   if (!mode) return { connected: false, server: false, reason: "The payment server has no platform key yet." };
+  if (!CLIENT_ID()) return { connected: false, server: false, reason: "The payment server is missing its Connect client ID." };
   const acct = await connected();
   if (!acct) return { connected: false, server: true, live: mode === "live" };
   if (acct.live !== (mode === "live")) return { connected: false, server: true, live: mode === "live", reason: "Stripe was connected in " + (acct.live ? "live" : "test") + " mode but the server is now in " + mode + " mode. Disconnect, then connect again." };
@@ -121,6 +124,7 @@ exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, as
     if (b.paid || b.status === "cancelled") throw new HttpsError("failed-precondition", "Nothing to pay on that booking.");
     if (kind === "deposit") {
       if (Number(b.depositPaid) > 0) throw new HttpsError("failed-precondition", "The deposit is already paid.");
+      if ((Number(b.price) || 0) < (Number(st.depositMin) || 0) || st.depositFor === "none") throw new HttpsError("failed-precondition", "No deposit is needed for this booking.");
       amount = depositFor(b.price, st); label = "Deposit";
     } else {
       amount = round2((Number(b.price) || 0) - (Number(b.depositPaid) || 0)); label = "Booking";
