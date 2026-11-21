@@ -11,7 +11,10 @@ service cloud.firestore {
 
     function signedIn() { return request.auth != null; }
     function myEmail() { return request.auth.token.email.lower(); }
-    function verified() { return signedIn() && request.auth.token.email_verified == true; }
+    // A confirmed email: verified by Firebase, or vouched for by Google at sign-in
+    function verified() {
+      return signedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
+    }
     function isAdmin() {
       return verified()
         && exists(/databases/$(database)/documents/config/admins)

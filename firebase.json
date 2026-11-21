@@ -93,7 +93,14 @@
           }
         ]
       }
-    ]
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ],
+    "cleanUrls": false
   },
   "firestore": {
     "rules": "firestore.rules"

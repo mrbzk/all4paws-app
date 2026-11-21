@@ -587,6 +587,8 @@ footer a{color:inherit}
 <body>
 <div id="app"></div>
 <script>
+const ROUTES = ["home", "book", "messages", "portal", "admin", "about", "portraits"];
+const USE_PATHS = !!document.querySelector('link[rel="manifest"]') && (location.protocol === "https:" || location.hostname === "localhost");
 // ===== CORE (pure logic, also used to build the seed data) =====
 const DEFAULT_CFG = {
   businessName: "ALL4PAWS",
@@ -1041,11 +1043,13 @@ async function handleAuth(user) {
   const em = String(user.email || "").toLowerCase();
   const google = (user.providerData || []).some(x => x.providerId === "google.com");
   if (!user.emailVerified && !google) { S.needsVerify = true; render(); return; }
-  try { const a = await db.doc("config/admins").get(); if (a.exists && (a.data().emails || []).map(x => String(x).toLowerCase()).includes(em)) S.canAdmin = true; } catch (e) { /* not staff */ }
+  S.staffCheck = "";
+  try { const a = await db.doc("config/admins").get(); if (a.exists && (a.data().emails || []).map(x => String(x).toLowerCase()).includes(em)) S.canAdmin = true; else S.staffCheck = a.exists ? "not on the list" : "no team list"; }
+  catch (e) { S.staffCheck = (e && e.code) || "error"; console.warn("staff check", e); }
   if (S.canAdmin) {
     keep(db.doc("config/admins").onSnapshot(sn => { S.admins = sn.exists ? (sn.data().emails || []) : []; render(); }, liveFail));
     for (const coll of ["clients", "pets", "bookings", "updates", "messages", "days"]) keep(db.collection(coll).onSnapshot(snap => { const rows = rowsOf(snap); if (coll === "bookings") { S.myBookings = rows; mergeBookings(); } else S[coll] = rows; render(); }, liveFail));
-    if (view() === "portal") location.hash = "admin";
+    if (view() === "portal") navTo("admin");
     render(); return;
   }
   let mine = null;
@@ -1057,13 +1061,13 @@ async function handleAuth(user) {
       if (free) { await db.doc("clients/" + free.id).update({ uid: user.uid }); free.uid = user.uid; mine = free; }
     } catch (e) { console.warn("link", e); }
   }
-  if (!mine) { S.needsProfile = true; if (view() !== "portal" && view() !== "admin") location.hash = "portal"; render(); return; }
+  if (!mine) { S.needsProfile = true; if (view() !== "portal" && view() !== "admin") navTo("portal"); render(); return; }
   S.me = mine.id; S.clients = [mine];
   keep(db.doc("clients/" + mine.id).onSnapshot(sn => { S.clients = sn.exists ? [Object.assign({ id: sn.id }, sn.data())] : []; render(); }, liveFail));
   keep(db.collection("pets").where("clientId", "==", mine.id).onSnapshot(snap => { S.pets = rowsOf(snap); render(); }, liveFail));
   keep(db.collection("bookings").where("clientId", "==", mine.id).onSnapshot(snap => { S.myBookings = rowsOf(snap); mergeBookings(); render(); }, liveFail));
   keep(db.collection("messages").where("clientId", "==", mine.id).onSnapshot(snap => { S.messages = rowsOf(snap); render(); if (view() === "messages") markRead(mine.id, "client"); }, liveFail));
-  if (S.afterAuth) { const go = S.afterAuth; S.afterAuth = null; location.hash = go; }
+  if (S.afterAuth) { const dest = S.afterAuth; S.afterAuth = null; navTo(dest); }
   render();
 }
 const AUTH_ERR = {
@@ -1108,8 +1112,30 @@ async function saveProfile(fd) {
 }
 
 // ----- router -----
-function view() { const h = location.hash.slice(1); return ["home", "book", "messages", "portal", "admin", "about", "portraits"].includes(h) ? h : "home"; }
-window.addEventListener("hashchange", () => { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); });
+// Live site: real addresses (/book, /admin...). Previews keep #book style links, which their hosts need.
+function view() {
+  const h = USE_PATHS ? location.pathname.replace(/^\/+|\/+$/g, "") : location.hash.slice(1);
+  return ROUTES.includes(h) ? h : "home";
+}
+function routeChanged() { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); }
+function navTo(v) {
+  if (!USE_PATHS) { location.hash = v; return; }
+  const path = v === "home" ? "/" : "/" + v;
+  if (location.pathname !== path) { history.pushState(null, "", path); routeChanged(); }
+}
+if (USE_PATHS) {
+  // Old #book style links still work
+  const fromHash = () => { const old = location.hash.slice(1); if (ROUTES.includes(old)) { history.replaceState(null, "", old === "home" ? "/" : "/" + old); return true; } return false; };
+  fromHash();
+  window.addEventListener("hashchange", () => { if (fromHash()) routeChanged(); });
+  window.addEventListener("popstate", routeChanged);
+  document.addEventListener("click", e => {
+    const a = e.target.closest && e.target.closest("a[href]"); if (!a || e.metaKey || e.ctrlKey || e.shiftKey || a.target) return;
+    const href = a.getAttribute("href"); const m = href.match(/^(?:#|\/)([a-z]*)$/);
+    if (m && (m[1] === "" || ROUTES.includes(m[1]))) { e.preventDefault(); navTo(m[1] || "home"); }
+  });
+} else window.addEventListener("hashchange", routeChanged);
+function fixLinks() { if (!USE_PATHS) return; document.querySelectorAll('a[href^="#"]').forEach(a => { const r = a.getAttribute("href").slice(1); if (ROUTES.includes(r)) a.setAttribute("href", r === "home" ? "/" : "/" + r); }); }
 
 // ----- rendering -----
 const LOGO = '<img class="logo-img" src="img/logo-160.png" alt="" width="44" height="44">';
@@ -1173,7 +1199,8 @@ function appBanners(v) {
   return h;
 }
 function needsYou() { return S.bookings.filter(b => b.status === "requested").length + unreadForTeam(); }
-function render() {
+function render() { renderView(); fixLinks(); }
+function renderView() {
   const v = view(); const c = C();
   document.title = c.businessName + " Platform";
   const isAdmin = v === "admin" && S.canAdmin;
@@ -1610,7 +1637,7 @@ function liveAuthView(forStaff) {
   if (!S.authReady) return wrap('<div class="card"><p class="muted">Checking your sign-in…</p></div>');
   if (u && S.needsVerify) return wrap('<div class="card stack"><h2>This login isn\'t confirmed yet</h2><p class="muted">' + esc(u.email) + ' was set up with a password but hasn\'t been confirmed, and we\'re not sending emails yet. Sign in with Google using the same email instead. Staff can then add a password in Settings > Team.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && S.canAdmin && !forStaff) return wrap('<div class="card stack"><h2>You\'re signed in as staff</h2><p class="muted">' + esc(u.email) + '</p><div class="row"><a class="btn primary" href="#admin">Go to the back office</a><button class="btn" type="button" data-act="signout">Sign out</button></div></div>');
-  if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p class="muted">' + esc(u.email) + ' isn\'t on the team list. Ask Nicole to add it in Settings > Team, or sign in with your staff account.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button><a class="btn" href="#portal">My account</a></div></div>');
+  if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p class="muted">' + esc(u.email) + ' isn\'t on the team list. Ask Nicole to add it in Settings > Team, or sign in with your staff account.</p>' + (S.staffCheck ? '<p class="small muted">Check result: ' + esc(S.staffCheck) + (S.authUser && S.authUser.emailVerified === false ? ", email not verified" : "") + "</p>" : "") + '<div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button><a class="btn" href="#portal">My account</a></div></div>');
   if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p>You\'re signed in as <strong>' + esc(u.email) + '</strong>, which isn\'t on the team list.</p><p class="muted small">Sign out and sign in again with your staff email. If this is the right email, ask whoever runs the back office to add it in Settings > Team.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && S.needsProfile) {
     const v = S.profileDraft || {};
@@ -2052,18 +2079,18 @@ async function handleClick(e) {
   if (act === "scrim" && e.target !== el) return;
   switch (act) {
     case "scrim": case "close": S.modal = null; render(); break;
-    case "book-svc": S.draft = { repeat: 1, serviceId: id }; S.done = null; S.errors = []; location.hash = "book"; render(); break;
+    case "book-svc": S.draft = { repeat: 1, serviceId: id }; S.done = null; S.errors = []; navTo("book"); render(); break;
     case "book-again": S.done = null; render(); break;
     case "submit-booking": await submitBooking(); break;
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
-    case "view-mode": location.hash = id === "admin" ? "admin" : (S.lastCustView || "home"); window.scrollTo(0, 0); break;
-    case "go-back": if (S.navCount > 1) history.back(); else location.hash = "home"; break;
-    case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; location.hash = "portal"; break;
+    case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo(0, 0); break;
+    case "go-back": if (S.navCount > 1) history.back(); else navTo("home"); break;
+    case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; navTo("portal"); break;
     case "admin-remove": { const list = (S.admins || []).filter(x => x !== id); try { await db.doc("config/admins").set({ emails: list }); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
-    case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); location.hash = "admin"; render(); window.scrollTo(0, 0); break;
+    case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo(0, 0); break;
     case "bfilter": S.bFilter = id; render(); break;
     case "approve": await patchBooking(id, { status: "confirmed" }); toast("Confirmed"); break;
     case "decline": await patchBooking(id, { status: "declined" }); toast("Declined"); break;
@@ -2084,7 +2111,7 @@ async function handleClick(e) {
     case "dayoff-add": { const inp = document.getElementById("s-dayoff"); const hid = document.getElementById("s-daysoff"); if (!inp || !hid || !inp.value) break; const list = new Set(hid.value ? hid.value.split(",") : []); list.add(inp.value); hid.value = [...list].sort().join(","); drawDaysOff(); inp.value = ""; break; }
     case "dayoff-rm": { const hid = document.getElementById("s-daysoff"); if (!hid) break; hid.value = hid.value.split(",").filter(x => x && x !== id).join(","); drawDaysOff(); break; }
     case "addon-new": S.newAddons = (S.newAddons || []).concat([{ id: "a-" + Date.now().toString(36), name: "New add-on", desc: "", price: 0, per: "dog", services: [], active: true }]); render(); break;
-    case "msg-to": { const cid = el.dataset.client; S.adminTab = "messages"; S.thread = cid; S.cmp = { key: "team:" + cid, text: "", photos: [], pets: (el.dataset.pets || "").split(",").filter(Boolean), err: "" }; if (location.hash !== "#admin") location.hash = "admin"; render(); window.scrollTo(0, 0); markRead(cid, "team"); break; }
+    case "msg-to": { const cid = el.dataset.client; S.adminTab = "messages"; S.thread = cid; S.cmp = { key: "team:" + cid, text: "", photos: [], pets: (el.dataset.pets || "").split(",").filter(Boolean), err: "" }; if (location.hash !== "#admin") navTo("admin"); render(); window.scrollTo(0, 0); markRead(cid, "team"); break; }
     case "thread": openThread(id); break;
     case "thread-close": S.thread = null; render(); break;
     case "cmp-send": await sendMessage(); break;
