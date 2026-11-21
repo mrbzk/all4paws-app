@@ -1,5 +1,5 @@
-// Nicole's Dog Co. service worker
-// Bump VERSION on every deploy so phones pick up the new app (the app shows "A new version is ready").
+// ALL4PAWS service worker
+// build.py stamps VERSION on every build so phones pick up the new app (the app shows "A new version is ready").
 const VERSION = "dogco-20261121-1";
 const SHELL = "shell-" + VERSION;
 const RUNTIME = "runtime-" + VERSION;
@@ -23,7 +23,7 @@ self.addEventListener("fetch", e => {
 
   // Pages: network first so updates arrive, fall back to the cached app, then the offline page.
   if (req.mode === "navigate") {
-    e.respondWith(fetch(req).then(res => { const copy = res.clone(); caches.open(SHELL).then(c => c.put("./index.html", copy)); return res; })
+    e.respondWith(fetch(req.url, { cache: "no-store", credentials: "same-origin" }).then(res => { const copy = res.clone(); caches.open(SHELL).then(c => c.put("./index.html", copy)); return res; })
       .catch(() => caches.match("./index.html").then(r => r || caches.match("./offline.html"))));
     return;
   }
