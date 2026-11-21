@@ -18,16 +18,13 @@ if ! firebase projects:list >/dev/null 2>&1; then
   firebase login --no-localhost
 fi
 
-echo "== Checking the Stripe keys are stored on the server"
-for S in STRIPE_SECRET STRIPE_WEBHOOK_SECRET; do
-  if ! firebase functions:secrets:access "$S" --project "$P" >/dev/null 2>&1; then
-    echo ""
-    echo "The secret $S isn't set yet. Paste it when asked (it won't show on screen)."
-    [ "$S" = STRIPE_SECRET ] && echo "Find it in Stripe: Developers > API keys > Secret key (starts sk_test_ or sk_live_)."
-    [ "$S" = STRIPE_WEBHOOK_SECRET ] && echo "Find it in Stripe: Developers > Webhooks > your endpoint > Signing secret (starts whsec_). If you haven't made the webhook yet, type 'later' and run this script again afterwards."
-    firebase functions:secrets:set "$S" --project "$P"
-  fi
-done
+echo "== Checking your Stripe key is stored on the server"
+if ! firebase functions:secrets:access STRIPE_SECRET --project "$P" >/dev/null 2>&1; then
+  echo ""
+  echo "Paste your Stripe secret key when asked (it won't show on screen)."
+  echo "Find it in Stripe: Developers > API keys > Secret key (starts sk_test_ or sk_live_)."
+  firebase functions:secrets:set STRIPE_SECRET --project "$P"
+fi
 
 echo "== Installing server packages"
 (cd functions && npm install --omit=dev --no-audit --no-fund)
@@ -36,5 +33,4 @@ echo "== Deploying the payment server"
 firebase deploy --only functions --project "$P" --non-interactive
 
 echo ""
-echo "Done. Your Stripe webhook address is:"
-echo "  https://europe-west2-$P.cloudfunctions.net/stripeWebhook"
+echo "Done. In the app, open Settings > Integrations, choose Card payments, then click Check connection."

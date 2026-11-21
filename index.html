@@ -1093,12 +1093,22 @@ async function payByCard(kind, bookingId, btn) {
   try { const r = await callFn("createCheckout", { kind, bookingId: bookingId || "" }); if (r && r.url) { location.href = r.url; return; } throw new Error("No payment page came back."); }
   catch (e) { if (btn) { btn.disabled = false; btn.textContent = "Try again"; } toast((e && e.message) || "Card payment isn't available right now. You can pay by bank transfer."); }
 }
-function paidReturn() {
-  const q = new URLSearchParams(location.search); if (!q.has("paid")) return;
-  const ok = q.get("paid") === "1"; q.delete("paid");
-  try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {}
-  setTimeout(() => toast(ok ? "Payment received, thank you. It can take a minute to show here." : "Payment cancelled. Nothing was charged."), 600);
+async function paidReturn() {
+  const q = new URLSearchParams(location.search); const back = q.has("paid"); const ok = q.get("paid") === "1"; const cs = q.get("cs") || "";
+  if (back) { q.delete("paid"); q.delete("cs"); try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {} }
+  if (back && !ok) setTimeout(() => toast("Payment cancelled. Nothing was charged."), 600);
+  // Wait for sign-in and settings, then ask the server to check open payments with Stripe (no webhook needed).
+  try { if (FB_AUTH && FB_AUTH.auth.authStateReady) await FB_AUTH.auth.authStateReady(); } catch (e) {}
+  for (let i = 0; i < 40 && !S.cfg; i++) await new Promise(r => setTimeout(r, 250));
+  if (!FB_AUTH || !FB_AUTH.auth.currentUser || !cardsOn()) { if (back && ok) toast("Thanks. Your payment will show here shortly."); return; }
+  if (back && ok) toast("Checking your payment with Stripe...");
+  try {
+    const r = await callFn("confirmCheckout", cs && ok ? { sessionId: cs } : {});
+    if (back && ok) toast(r && r.paid ? "Payment received, thank you." : "Stripe is still processing your payment. It will show here once it clears.");
+    else if (r && r.paid && S.canAdmin) toast(r.paid + (r.paid === 1 ? " card payment" : " card payments") + " recorded from Stripe.");
+  } catch (e) { if (back && ok) toast("Thanks. Your payment will show here shortly."); }
 }
+
 function integrationsCards(sec) {
   const hid = sec === "integrations" ? "" : " hidden"; const x = xeroCfg(); const st = stripeCfg();
   const pend = xeroEligible(false); const pendInv = new Set(pend.map(b => b.clientId)).size;

@@ -1,8 +1,8 @@
-// ALL4PAWS server functions: Stripe Checkout for deposits, bookings and balances, and a webhook that marks
-// bookings paid when Stripe confirms the payment.
-// Secrets (set once from a terminal, never stored in code or chat):
-//   firebase functions:secrets:set STRIPE_SECRET          (your Stripe secret key, sk_test_... or sk_live_...)
-//   firebase functions:secrets:set STRIPE_WEBHOOK_SECRET  (the webhook signing secret, whsec_...)
+// ALL4PAWS server functions: Stripe Checkout for deposits, bookings and balances.
+// No webhook needed: when a customer returns from Stripe, or when anyone opens the app, the server asks Stripe
+// directly whether open payments went through, then marks the bookings paid.
+// Secret (set once from a terminal, never stored in code or chat):
+//   firebase functions:secrets:set STRIPE_SECRET   (your Stripe secret key, sk_test_... or sk_live_...)
 const { onCall, onRequest, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -11,7 +11,6 @@ admin.initializeApp();
 const db = admin.firestore();
 const REGION = "europe-west2";
 const STRIPE_SECRET = defineSecret("STRIPE_SECRET");
-const STRIPE_WEBHOOK_SECRET = defineSecret("STRIPE_WEBHOOK_SECRET");
 const stripeFor = () => require("stripe")(STRIPE_SECRET.value());
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 
@@ -88,33 +87,56 @@ exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, as
     line_items: [{ quantity: 1, price_data: { currency: "gbp", unit_amount: pence, product_data: { name: (cfg.businessName || "ALL4PAWS") + " " + label.toLowerCase() } } }],
     metadata,
     payment_intent_data: { metadata, description: (cfg.businessName || "ALL4PAWS") + " " + label.toLowerCase() + " for " + client.name },
-    success_url: origin + "/portal?paid=1",
+    success_url: origin + "/portal?paid=1&cs={CHECKOUT_SESSION_ID}",
     cancel_url: origin + "/portal?paid=0"
   });
+  await db.doc("checkouts/" + session.id).set({ clientId: client.id, kind, bookingIds: ids, amount, status: "open", createdAt: new Date().toISOString() });
   return { url: session.url };
 });
 
-// Stripe calls this when a payment completes. It checks Stripe's signature, then marks the bookings paid.
-exports.stripeWebhook = onRequest({ region: REGION, secrets: [STRIPE_SECRET, STRIPE_WEBHOOK_SECRET] }, async (req, res) => {
-  let event;
-  try { event = stripeFor().webhooks.constructEvent(req.rawBody, req.headers["stripe-signature"], STRIPE_WEBHOOK_SECRET.value()); }
-  catch (e) { res.status(400).send("Signature check failed"); return; }
+// Marks bookings paid (or records the deposit) for a completed Checkout. Safe to run more than once.
+async function applyPaid(s, livemode) {
+  const payRef = db.collection("payments").doc(s.id);
+  if ((await payRef.get()).exists) return false;
+  const m = s.metadata || {};
+  const ids = String(m.bookingIds || "").split(",").filter(Boolean);
+  const amount = round2((s.amount_total || 0) / 100); const at = new Date().toISOString();
+  for (const id of ids) {
+    const ref = db.doc("bookings/" + id); const snap = await ref.get(); if (!snap.exists) continue;
+    if (m.kind === "deposit") await ref.update({ depositPaid: amount, depositAt: at, stripeDeposit: s.id });
+    else await ref.update({ paid: true, paidAt: at, paidBy: "card", stripePayment: s.id });
+  }
+  await payRef.set({ clientId: m.clientId || "", kind: m.kind || "", bookingIds: ids, amount, at, email: (s.customer_details && s.customer_details.email) || "", live: !!livemode });
+  return true;
+}
 
-  if (event.type === "checkout.session.completed" || event.type === "checkout.session.async_payment_succeeded") {
-    const s = event.data.object; const m = s.metadata || {};
-    if (s.payment_status === "paid") {
-      const payRef = db.collection("payments").doc(s.id);
-      if (!(await payRef.get()).exists) {
-        const ids = String(m.bookingIds || "").split(",").filter(Boolean);
-        const amount = round2((s.amount_total || 0) / 100); const at = new Date().toISOString();
-        for (const id of ids) {
-          const ref = db.doc("bookings/" + id); const snap = await ref.get(); if (!snap.exists) continue;
-          if (m.kind === "deposit") await ref.update({ depositPaid: amount, depositAt: at, stripeDeposit: s.id });
-          else await ref.update({ paid: true, paidAt: at, paidBy: "card", stripePayment: s.id });
-        }
-        await payRef.set({ clientId: m.clientId || "", kind: m.kind || "", bookingIds: ids, amount, at, email: (s.customer_details && s.customer_details.email) || "", live: !!event.livemode });
-      }
+// Asks Stripe about open payments and records the ones that went through.
+// A customer checks their own; staff check everyone's. Pass sessionId right after returning from Stripe.
+exports.confirmCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
+  if (!req.auth) throw new HttpsError("unauthenticated", "Please sign in first.");
+  const staff = await isStaff(req.auth);
+  let mine = null;
+  if (!staff) {
+    const found = await db.collection("clients").where("uid", "==", req.auth.uid).limit(1).get();
+    if (found.empty) return { paid: 0 };
+    mine = found.docs[0].id;
+  }
+  const want = String((req.data || {}).sessionId || "");
+  let docs = [];
+  if (want) { const d = await db.doc("checkouts/" + want).get(); if (d.exists) docs = [d]; }
+  else docs = (await (mine ? db.collection("checkouts").where("clientId", "==", mine) : db.collection("checkouts")).where("status", "==", "open").limit(50).get()).docs;
+  const stripe = stripeFor(); let paid = 0;
+  for (const d of docs) {
+    const c = d.data();
+    if (mine && c.clientId !== mine) continue;
+    if (c.status !== "open") { if (c.status === "paid" && want) paid++; continue; }
+    let s;
+    try { s = await stripe.checkout.sessions.retrieve(d.id); } catch (e) { continue; }
+    if (s.payment_status === "paid" || s.payment_status === "no_payment_required") {
+      await applyPaid(s, s.livemode); await d.ref.update({ status: "paid", checkedAt: new Date().toISOString() }); paid++;
+    } else if (s.status === "expired") {
+      await d.ref.update({ status: "expired", checkedAt: new Date().toISOString() });
     }
   }
-  res.json({ received: true });
+  return { paid };
 });
