@@ -98,6 +98,7 @@ service cloud.firestore {
         ownsClient(request.resource.data.clientId)
         && request.resource.data.status in ['requested', 'confirmed']
         && request.resource.data.get('paid', false) == false
+        && request.resource.data.get('depositPaid', 0) == 0
       );
       // Customers can only cancel their own booking
       allow update: if isAdmin() || (
@@ -125,6 +126,8 @@ service cloud.firestore {
     // Back office only
     match /updates/{id} { allow read, write: if isAdmin(); }
     match /days/{id} { allow read, write: if isAdmin(); }
+    // Card payments are written only by the server (Stripe webhook).
+    match /payments/{id} { allow read: if isAdmin(); allow write: if false; }
 
     // Anything else: no access
     match /{document=**} { allow read, write: if false; }
