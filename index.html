@@ -568,6 +568,10 @@ footer a{color:inherit}
 .ticks{margin:0 0 14px;padding-left:20px}.ticks li{margin:4px 0}
 .portrait-cta{background:var(--sun-soft);border-color:var(--sun);max-width:760px}
 @media (max-width:900px){.art-grid{grid-template-columns:1fr}}
+
+.backlink{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--accent);margin-bottom:14px;padding:6px 2px}
+.backlink:hover{text-decoration:underline}
+.backlink:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
 </style>
 </head>
 <body>
@@ -1095,7 +1099,7 @@ async function saveProfile(fd) {
 
 // ----- router -----
 function view() { const h = location.hash.slice(1); return ["home", "book", "messages", "portal", "admin", "about", "portraits"].includes(h) ? h : "home"; }
-window.addEventListener("hashchange", () => { if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); });
+window.addEventListener("hashchange", () => { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); });
 
 // ----- rendering -----
 const LOGO = '<img class="logo-img" src="img/logo-160.png" alt="" width="44" height="44">';
@@ -1355,7 +1359,7 @@ function viewHome() {
 function viewPortraits() {
   const fig = (src, alt) => '<figure class="art"><img src="' + src + '" alt="' + esc(alt) + '" loading="lazy"><figcaption class="small muted">' + esc(alt) + "</figcaption></figure>";
   const cta = S.me ? '<a class="btn primary lg" href="#messages">Message us to register interest</a>' : '<a class="btn primary lg" href="#portal">Sign in to register interest</a>';
-  return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">Coming soon</p><h1 class="quote">Commission bespoke dog artwork</h1><div class="about-copy">' +
+  return '<section class="hero about-hero"><div class="wrap"><div><button type="button" class="backlink" data-act="go-back"><span aria-hidden="true">←</span> Back</button><p class="eyebrow">Coming soon</p><h1 class="quote">Commission bespoke dog artwork</h1><div class="about-copy">' +
     "<p>I'm delighted to share that I am now collaborating with Adrian Smart, a highly regarded professional watercolour artist with an impressive background in Graphic Design and Fine Art, to offer exclusive, bespoke commissioned dog portraits.</p>" +
     "<p>Adrian's work is truly exceptional. Combining remarkable detail with a hyperrealistic, almost photographic style, his portraits capture each subject with incredible precision, complemented by beautifully soft, atmospheric backgrounds. The result is artwork that not only captures a dog's appearance but also celebrates their individual character and personality.</p>" +
     '</div><div class="row">' + cta + "</div></div>" + fig("img/portrait-1.jpg", "A portrait by Adrian Smart") + "</div></section>" +
@@ -2036,6 +2040,7 @@ async function handleClick(e) {
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
     case "view-mode": location.hash = id === "admin" ? "admin" : (S.lastCustView || "home"); window.scrollTo(0, 0); break;
+    case "go-back": if (S.navCount > 1) history.back(); else location.hash = "home"; break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; location.hash = "portal"; break;
     case "auth-reload": try { await authReload(); } catch (e) { toast(authErr(e)); } break;
     case "auth-resend": try { await FB_AUTH.M.sendEmailVerification(FB_AUTH.auth.currentUser); toast("Sent. Check your inbox."); } catch (e) { toast(authErr(e)); } break;
