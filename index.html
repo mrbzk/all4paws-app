@@ -1048,10 +1048,17 @@ async function handleAuth(user) {
   const google = (user.providerData || []).some(x => x.providerId === "google.com");
   if (!user.emailVerified && !google) { S.needsVerify = true; render(); return; }
   S.staffCheck = "";
-  try { const a = await db.doc("config/admins").get(); if (a.exists && (a.data().emails || []).map(x => String(x).toLowerCase()).includes(em)) S.canAdmin = true; else S.staffCheck = a.exists ? "not on the list" : "no team list"; }
+  try {
+    const a = await db.doc("config/admins").get(); const d = a.exists ? a.data() : null;
+    if (d && ((d.emails || []).map(x => String(x).toLowerCase()).includes(em) || (d.staffUids || {})[user.uid])) {
+      S.canAdmin = true;
+      // Remember this account, so a password sign-in works as well as Google
+      if (!(d.staffUids || {})[user.uid]) { try { await db.doc("config/admins").set(Object.assign({}, d, { staffUids: Object.assign({}, d.staffUids || {}, { [user.uid]: em }) })); } catch (e) { console.warn("staff uid", e); } }
+    } else S.staffCheck = a.exists ? "not on the list" : "no team list";
+  }
   catch (e) { S.staffCheck = (e && e.code) || "error"; console.warn("staff check", e); }
   if (S.canAdmin) {
-    keep(db.doc("config/admins").onSnapshot(sn => { S.admins = sn.exists ? (sn.data().emails || []) : []; render(); }, liveFail));
+    keep(db.doc("config/admins").onSnapshot(sn => { S.team = sn.exists ? sn.data() : { emails: [] }; S.admins = S.team.emails || []; render(); }, liveFail));
     for (const coll of ["clients", "pets", "bookings", "updates", "messages", "days"]) keep(db.collection(coll).onSnapshot(snap => { const rows = rowsOf(snap); if (coll === "bookings") { S.myBookings = rows; mergeBookings(); } else S[coll] = rows; render(); }, liveFail));
     if (view() === "portal") navTo("admin");
     render(); return;
@@ -2091,7 +2098,7 @@ async function handleClick(e) {
     case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo(0, 0); break;
     case "go-back": if (S.navCount > 1) history.back(); else navTo("home"); break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; navTo("portal"); break;
-    case "admin-remove": { const list = (S.admins || []).filter(x => x !== id); try { await db.doc("config/admins").set({ emails: list }); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
+    case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "tab": S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo(0, 0); break;
@@ -2225,8 +2232,8 @@ async function handleSubmit(e) {
   if (kind === "admin-add") {
     const em = String(fd.get("email") || "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Add a valid email address."); return; }
-    const list = Array.from(new Set((S.admins || []).concat(em)));
-    try { await db.doc("config/admins").set({ emails: list }); toast("Added " + em + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
+    const t = S.team || {}; const list = Array.from(new Set((t.emails || []).concat(em)));
+    try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list })); toast("Added " + em + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
     return;
   }
   if (kind === "signin") {

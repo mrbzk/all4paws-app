@@ -15,10 +15,14 @@ service cloud.firestore {
     function verified() {
       return signedIn() && (request.auth.token.email_verified == true || request.auth.token.firebase.sign_in_provider == 'google.com');
     }
+    // Staff are recognised by their account (staffUids, added the first time they sign in with a confirmed
+    // email or Google) or by a confirmed email on the list (emails)
+    function teamDoc() { return get(/databases/$(database)/documents/config/admins).data; }
     function isAdmin() {
-      return verified()
+      return signedIn()
         && exists(/databases/$(database)/documents/config/admins)
-        && myEmail() in get(/databases/$(database)/documents/config/admins).data.emails;
+        && (request.auth.uid in teamDoc().get('staffUids', {}).keys()
+            || (verified() && myEmail() in teamDoc().emails));
     }
     // The signed-in person owns the customer record with this id
     function ownsClient(cid) {
@@ -33,7 +37,8 @@ service cloud.firestore {
     }
 
     match /config/admins {
-      allow read: if verified() && myEmail() in resource.data.emails;
+      allow read: if signedIn() && (request.auth.uid in resource.data.get('staffUids', {}).keys()
+        || (verified() && myEmail() in resource.data.emails));
       allow write: if isAdmin();
     }
 
