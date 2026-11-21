@@ -940,7 +940,8 @@ async function firebaseBackend(conf) {
   const [A, F, ST, AU] = await Promise.all([import(B + "firebase-app.js"), import(B + "firebase-firestore.js"), import(B + "firebase-storage.js"), import(B + "firebase-auth.js")]);
   const app = A.initializeApp(conf);
   FB_APP = app; FB_AUTH = { M: AU, auth: AU.getAuth(app) }; setTimeout(ssoRedirectResult, 0);
-  let fdb; try { fdb = F.initializeFirestore(app, { localCache: F.persistentLocalCache({ tabManager: F.persistentMultipleTabManager() }) }); } catch (e) { fdb = F.getFirestore(app); }
+  // Each tab talks to the database itself. (A shared offline cache let one stale tab block all the others.)
+  let fdb; try { fdb = F.initializeFirestore(app, { localCache: F.memoryLocalCache() }); } catch (e) { fdb = F.getFirestore(app); }
   const code = e => (e && e.code === "permission-denied" ? "invalid_argument" : e && e.code === "resource-exhausted" ? "resource_exhausted" : "unavailable");
   const wrap = sn => ({ id: sn.id, exists: sn.exists(), data: () => sn.data(), metadata: { fromCache: sn.metadata.fromCache, hasPendingWrites: sn.metadata.hasPendingWrites } });
   const docRef = path => { const r = F.doc(fdb, path); return { id: r.id, path,
