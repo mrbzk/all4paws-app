@@ -1228,8 +1228,8 @@ function renderView() {
   document.title = c.businessName + " Platform";
   const isAdmin = v === "admin" && S.canAdmin;
   if (v !== "admin") S.lastCustView = v;
-  const nav = isAdmin ? [] : [["about", "About us"], ["book", "Book"], ["portal", "Account"]];
-  if (!isAdmin && S.canAdmin) nav.push(["admin", "Back office"]); // staff only, once signed in; everyone else uses "Staff sign in" in the footer
+  // Signed-in staff see Back office in place of Account; everyone else signs in to the back office from the footer
+  const nav = isAdmin ? [] : [["about", "About us"], ["book", "Book"], S.canAdmin ? ["admin", "Back office"] : ["portal", "Account"]];
   const nY = needsYou() && !isQuiet() ? needsYou() : 0;
   const modeSw = isAdmin ? '<a class="viewsite" href="#home"><span aria-hidden="true">←</span> View site</a>' : "";
   document.body.classList.toggle("admin-mode", isAdmin);
