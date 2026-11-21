@@ -580,12 +580,9 @@ footer a{color:inherit}
 @media (prefers-reduced-motion: reduce){.gallery img{transition:none}.gallery figure:hover img{transform:none}}
 @media (max-width:640px){.gallery{display:none}}
 
-.paybox{background:var(--surface);border:1px solid var(--line);border-left:4px solid var(--accent);border-radius:14px;padding:16px 18px;margin-bottom:18px;max-width:520px}
-.paybox h3{margin:0 0 8px;font-size:1.05rem}
-.paydl{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;margin:0}
-.paydl dt{color:var(--muted)}
-.paydl dd{margin:0;font-weight:700;user-select:all}
-.paybox h3,.paydl dd{color:var(--ink)}
+
+.payline{margin-top:10px;padding-top:10px;border-top:1px solid var(--line);color:var(--muted);font-size:.78rem}
+.payline .num{white-space:nowrap}
 </style>
 </head>
 <body>
@@ -1202,7 +1199,7 @@ function render() {
   else if (v === "messages") html += viewMessages();
   else if (v === "admin") html += S.canAdmin ? viewAdmin() : S.fb ? liveAuthView(true) : '<div class="wrap" style="padding:60px 20px"><div class="empty">The back office is for the team only.</div></div>';
   const bank = c.bank || DEFAULT_CFG.bank;
-  if (v !== "admin") html += '<footer><div class="wrap"><div class="paybox"><h3>Need to make a payment?</h3><dl class="paydl"><dt>Account name</dt><dd>' + esc(bank.name) + '</dd><dt>Sort code</dt><dd class="num">' + esc(bank.sort) + '</dd><dt>Account number</dt><dd class="num">' + esc(bank.account) + '</dd></dl></div></div><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#home">Services</a> · <a href="#portraits">Pet Portraits</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div></footer>';
+  if (v !== "admin") html += '<footer><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#home">Services</a> · <a href="#portraits">Pet Portraits</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div><div class="wrap payline small">Need to make a payment? ' + esc(bank.name) + ' · <span class="num">Sort code ' + esc(bank.sort) + '</span> · Account number <span class="num">' + esc(bank.account) + '</span></div></footer>';
   if (S.modal) html += viewModal();
   if (S.toast) html += '<div class="toast" role="status"><span>' + esc(S.toast) + "</span>" + (S.toastUndo ? '<button type="button" data-act="undo">Undo</button>' : "") + "</div>";
   const active = document.activeElement; const aid = active && active.id; const pos = active && active.selectionStart;
