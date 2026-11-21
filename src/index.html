@@ -568,6 +568,13 @@ footer a{color:inherit}
 .backlink{all:unset;cursor:pointer;display:inline-flex;align-items:center;gap:6px;font-weight:700;color:var(--accent);margin-bottom:14px;padding:6px 2px}
 .backlink:hover{text-decoration:underline}
 .backlink:focus-visible{outline:2px solid var(--accent);outline-offset:3px;border-radius:6px}
+
+.gallery{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;align-self:center}
+.gallery figure{margin:0;aspect-ratio:1/1;border-radius:16px;overflow:hidden;box-shadow:var(--shadow);background:var(--surface-2)}
+.gallery img{width:100%;height:100%;object-fit:cover;display:block;transition:transform .3s ease}
+.gallery figure:hover img{transform:scale(1.04)}
+@media (prefers-reduced-motion: reduce){.gallery img{transition:none}.gallery figure:hover img{transform:none}}
+@media (max-width:640px){.gallery{display:none}}
 </style>
 </head>
 <body>
@@ -1335,6 +1342,14 @@ function priceText(s) {
   if (s.sizes) return money(s.sizes.S) + "–" + money(s.sizes.L) + " <small>by size</small>";
   return money(s.price) + " <small>per " + esc(s.unit) + "</small>";
 }
+const GALLERY = [
+  ["g1-nicole", "Nicole on a walk with a group of dogs"],
+  ["g2-white-dog", "A happy white dog lying on the grass"],
+  ["g3-lab-smile", "A golden dog smiling in a field"],
+  ["g4-cavalier", "A Cavalier King Charles spaniel resting on a blanket"],
+  ["g5-red-lab", "A fox red Labrador waiting on a woodland path"],
+  ["g6-tyres", "Three dogs playing on tyres in a field"]
+];
 const HOME_SERVICES = [
   ["walk", "Dog walks", "An hour out with sniff time, play and a towel-down before we drop them home."],
   ["daycare", "Daycare", "A full day of play, rest and company while you're at work."],
@@ -1345,7 +1360,7 @@ const HOME_SERVICES = [
 function viewHome() {
   const c = C();
   return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#about">About us</a></div></div>' +
-    '<figure class="hero-photo"><img src="' + esc(c.heroPhoto || "img/logo.jpg") + '" alt="Nicole with the dogs" width="900" height="900"></figure></div></section>' +
+    '<div class="gallery" role="list" aria-label="Photos of Nicole and the dogs">' + GALLERY.map(([f, alt]) => '<figure role="listitem"><img src="img/' + f + '.jpg" alt="' + esc(alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div></div></section>" +
     '<section class="block"><div class="wrap"><h2>Services</h2><ul class="svc-list">' + HOME_SERVICES.map(([cat, name, line]) => '<li><span class="cat ' + cat + '" aria-hidden="true"></span><div><h3>' + name + '</h3><p class="muted">' + line + "</p></div></li>").join("") +
     '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Bespoke, hyperrealistic watercolour portraits of your dog by award-winning artist Adrian Smart. A timeless keepsake, or a gift to treasure.</p><p style="margin:8px 0 0"><a href="#portraits">See his work</a></p></div></li></ul>' +
     '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a></div></div></section>' +
@@ -1373,7 +1388,7 @@ function viewAbout() {
   const c = C(); const ph = (src, alt) => '<figure class="about-photo"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></figure>';
   const paras = String(c.aboutText || ABOUT_DEFAULT).split(/\n\s*\n/).map(x => "<p>" + esc(x.trim()) + "</p>").join("");
   return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">About us</p><h1 class="quote">Meet ' + esc(c.businessName) + '</h1><div class="about-copy">' + paras + '</div><div class="row"><a class="btn primary lg" href="#book">Book now</a></div></div>' +
-    ph(c.heroPhoto || "img/logo.jpg", "Nicole with the dogs") + '</div></section>' +
+    ph(c.heroPhoto || "img/nicole.jpg", "Nicole on a walk with the dogs") + '</div></section>' +
     '<section class="block"><div class="wrap"><h2>The team</h2><div class="team"><div class="card"><h3>Nicole</h3><p class="muted">Founder. Walks, daycare, overnight stays and drop-ins.</p></div><div class="card"><h3>Lauren</h3><p class="muted">Groomer. Baths, tidy-ups and full clips.</p></div></div></div></section>';
 }
 const ABOUT_DEFAULT = "ALL4PAWS is Nicole's dog care business: walks, daycare, overnight stays, drop-ins and grooming, all from one small team who get to know every dog by name.\n\nNicole looks after the walks, daycare, overnight stays and drop-ins herself, and Lauren runs the grooming. Dogs stay in a real home, keep their own food and routine, and you get photos and notes after every visit.\n\nWe're always happy to meet new dogs. Book a free meet and greet and come and say hello.";
