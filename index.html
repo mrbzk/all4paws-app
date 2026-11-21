@@ -1083,7 +1083,6 @@ async function authSignUp(name, email, pass) {
   const { M, auth } = FB_AUTH;
   const cred = await M.createUserWithEmailAndPassword(auth, email, pass);
   try { await M.updateProfile(cred.user, { displayName: name }); } catch (e) {}
-  try { await M.sendEmailVerification(cred.user); } catch (e) {}
 }
 async function authReload() {
   const u = FB_AUTH.auth.currentUser; if (!u) return;
@@ -1451,7 +1450,7 @@ const visits = svc && svc.cat === "walk" ? Number(d.repeat || 1) : 1;
     const mine = petsOf(S.me);
     h += mine.length ? '<div class="choice-grid">' + mine.map(p => { const on = (d.petIds || []).includes(p.id); const vs = vaxState(p, d.date || t); return '<label class="choice' + (on ? " on" : "") + '"><input type="checkbox" data-pet="' + esc(p.id) + '"' + (on ? " checked" : "") + '><span><span class="t">' + esc(p.name) + '</span><span class="s">' + esc(dogSummary(p) || "Dog") + "</span>" + (svc && svc.vax && vs.worst !== "ok" && vs.worst !== "expiring" ? '<span class="pill ' + vs.worst + '" style="margin-top:4px">Vaccines ' + vs.worst + "</span>" : "") + "</span></label>"; }).join("") + "</div>" : '<p class="muted">No dogs on your account yet. Add one in My account.</p>';
   } else if (S.fb) {
-    h += '<div class="signin-cta"><p><strong>Sign in or create an account to book.</strong> It takes a minute, and your dog\'s details are saved for next time. Your choices here are kept.</p><div class="row"><button type="button" class="btn primary" data-act="go-auth" data-id="signup">Create account</button><button type="button" class="btn" data-act="go-auth" data-id="signin">Sign in</button></div></div>';
+    h += '<div class="signin-cta"><p><strong>Sign in or create an account to book.</strong> It takes a minute, and your dog\'s details are saved for next time. Your choices here are kept.</p><div class="row"><button type="button" class="btn primary" data-act="go-auth" data-id="signin">Sign in or create account</button></div></div>';
   } else {
     h += '<div class="grid2"><div class="field"><label for="c-name">Your name</label><input type="text" id="c-name" data-d="c_name" value="' + esc(d.c_name || "") + '" autocomplete="name"></div><div class="field"><label for="c-email">Email</label><input type="email" id="c-email" data-d="c_email" value="' + esc(d.c_email || "") + '" autocomplete="email"></div><div class="field"><label for="c-phone">Mobile number</label><input type="tel" id="c-phone" data-d="c_phone" value="' + esc(d.c_phone || "") + '" autocomplete="tel"></div><div class="field"><label for="c-addr">Pick-up address</label><input type="text" id="c-addr" data-d="c_address" value="' + esc(d.c_address || "") + '" autocomplete="street-address"></div></div>';
     h += '<h4 style="margin-top:6px">Your dog</h4><p class="small muted">First time with us? These details go on your dog\'s record, so we only ask once.</p>' + dogFields({}, "draft", "p-") + (svc && svc.cat === "groom" ? '<div class="field"><label for="p-weight">Weight (kg)</label><input type="number" id="p-weight" min="1" max="100" data-d="p_weight" data-rr value="' + esc(d.p_weight || "") + '"><span class="hint">Grooming is priced by size.</span></div>' : "");
@@ -1610,7 +1609,7 @@ function liveAuthView(forStaff) {
   const err = S.portalErr ? '<div class="errors" role="alert">' + esc(S.portalErr) + "</div>" : "";
   const u = S.authUser;
   if (!S.authReady) return wrap('<div class="card"><p class="muted">Checking your sign-in…</p></div>');
-  if (u && S.needsVerify) return wrap('<div class="card stack"><h2>Check your inbox</h2><p>We sent a link to <strong>' + esc(u.email) + '</strong>. Click it to confirm your email, then come back here.</p><p class="small muted">Can\'t see it? Look in your spam or promotions folder.</p>' + err + '<div class="row"><button class="btn primary" type="button" data-act="auth-reload">I\'ve clicked the link</button><button class="btn" type="button" data-act="auth-resend">Send it again</button></div><p class="small"><button type="button" class="linkbtn" data-act="signout">Use a different account</button></p></div>');
+  if (u && S.needsVerify) return wrap('<div class="card stack"><h2>This login isn\'t confirmed yet</h2><p class="muted">' + esc(u.email) + ' was set up with a password but hasn\'t been confirmed, and we\'re not sending emails yet. Sign in with Google using the same email instead. Staff can then add a password in Settings > Team.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && S.canAdmin && !forStaff) return wrap('<div class="card stack"><h2>You\'re signed in as staff</h2><p class="muted">' + esc(u.email) + '</p><div class="row"><a class="btn primary" href="#admin">Go to the back office</a><button class="btn" type="button" data-act="signout">Sign out</button></div></div>');
   if (u && forStaff && !S.canAdmin) return wrap('<div class="card stack"><h2>No back office access</h2><p class="muted">' + esc(u.email) + ' isn\'t on the team list. Ask Nicole to add it in Settings > Team, or sign in with your staff account.</p><div class="row"><button class="btn primary" type="button" data-act="signout">Sign out</button><a class="btn" href="#portal">My account</a></div></div>');
   if (u && S.needsProfile) {
@@ -1622,14 +1621,10 @@ function liveAuthView(forStaff) {
       '<p class="small muted">More than one dog? Add the others from your account afterwards. Already a customer under a different email? Sign out and use that one, or message us.</p>' + err +
       '<div class="row"><button class="btn primary" type="submit">Save and continue</button><button class="btn" type="button" data-act="signout">Sign out</button></div></form>');
   }
-  const up = S.portalTab === "signup" && !forStaff;
-  const tabs = forStaff ? "" : '<div class="authtabs" role="tablist"><button type="button" role="tab" aria-selected="' + !up + '" class="' + (up ? "" : "on") + '" data-act="auth-tab" data-id="signin">Sign in</button><button type="button" role="tab" aria-selected="' + up + '" class="' + (up ? "on" : "") + '" data-act="auth-tab" data-id="signup">Create account</button></div>';
-  if (!up) return wrap('<form class="card stack" data-form="auth-signin">' + tabs + "<h2>" + (forStaff ? "Back office sign in" : "Welcome back") + '</h2><p class="muted">' + (forStaff ? "For Nicole and the team." : "Sign in to book, and to see your bookings, updates and invoices.") + "</p>" + SSO_HTML +
+  if (!forStaff) return wrap('<div class="card stack"><h2>Sign in or create your account</h2><p class="muted">Use your Google account to book, and to see your bookings, updates and invoices. Already a customer? Use the email Nicole has for you and your account links automatically.</p>' + SSO_HTML.replace('<div class="or" aria-hidden="true">or use your email</div>', "") + err + '<p class="small muted">No Google account? Message or call us and we\'ll book for you.</p></div>');
+  return wrap('<form class="card stack" data-form="auth-signin"><h2>Back office sign in</h2><p class="muted">For Nicole and the team.</p>' + SSO_HTML +
     '<div class="field"><label for="au-email">Email</label><input type="email" id="au-email" name="email" required autocomplete="email" value="' + esc(S.portalEmail || "") + '"></div><div class="field"><label for="au-pass">Password</label><input type="password" id="au-pass" name="password" required autocomplete="current-password"></div>' + err +
-    '<button class="btn primary" type="submit">Sign in</button><p class="small"><button type="button" class="linkbtn" data-act="auth-reset">Forgot your password?</button>' + (forStaff ? "" : ' · New here? <button type="button" class="linkbtn" data-act="auth-tab" data-id="signup">Create an account</button>') + "</p></form>");
-  return wrap('<form class="card stack" data-form="auth-signup">' + tabs + '<h2>Create your account</h2><p class="muted">Set it up once, then book walks, daycare, overnight stays and grooms in a few taps. Already a customer? Use the email Nicole has for you and we\'ll link your account.</p>' + SSO_HTML.replace(/Continue with/g, "Sign up with").replace("or use your email", "or sign up with your email") +
-    '<div class="field"><label for="su-name">Your name</label><input type="text" id="su-name" name="name" required autocomplete="name" value="' + esc(S.signupName || "") + '"></div><div class="field"><label for="su-email">Email</label><input type="email" id="su-email" name="email" required autocomplete="email" value="' + esc(S.portalEmail || "") + '"></div><div class="field"><label for="su-pass">Password</label><input type="password" id="su-pass" name="password" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div>' + err +
-    '<button class="btn primary" type="submit">Create account</button><p class="small">Already have an account? <button type="button" class="linkbtn" data-act="auth-tab" data-id="signin">Sign in</button></p></form>');
+    '<button class="btn primary" type="submit">Sign in</button><p class="small muted">First time? Sign in with Google, then add a password in Settings > Team.</p></form>');
 }
 function portalAuth(sample) {
   if (S.fb) return liveAuthView(false);
@@ -1972,6 +1967,8 @@ function adminSettings() {
   const part = (k, title, intro, inner) => '<section class="card stack" data-sec="' + k + '"' + (sec === k ? "" : " hidden") + '><div><h3>' + title + '</h3><p class="small muted">' + intro + "</p></div>" + inner + "</section>";
   let h = '<div class="head"><div><h2>Settings</h2><p class="muted">One section at a time. Press Save when you\'re done.</p></div></div>';
   h += '<div class="subnav" role="tablist" aria-label="Settings sections">' + SET_SECS.map(([k, l]) => '<button type="button" role="tab" data-act="settab" data-id="' + k + '"' + (sec === k ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + ">" + l + "</button>").join("") + "</div>";
+  if (S.fb && sec === "team" && S.authUser) { const hasPw = (S.authUser.providerData || []).some(x => x.providerId === "password");
+    h += '<section class="card stack"><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
   if (S.fb && sec === "team") h += '<section class="card stack"><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => '<li class="li"><span>' + esc(em) + (S.authUser && String(S.authUser.email).toLowerCase() === em ? ' <span class="muted small">(you)</span>' : "") + "</span>" + (S.authUser && String(S.authUser.email).toLowerCase() === em ? "" : '<button type="button" class="btn sm" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button>') + "</li>").join("") + '</ul><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><button class="btn" type="submit">Add</button></form></section>';
   h += '<form class="stack" data-form="settings">';
   if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
@@ -2063,9 +2060,6 @@ async function handleClick(e) {
     case "view-mode": location.hash = id === "admin" ? "admin" : (S.lastCustView || "home"); window.scrollTo(0, 0); break;
     case "go-back": if (S.navCount > 1) history.back(); else location.hash = "home"; break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; location.hash = "portal"; break;
-    case "auth-reload": try { await authReload(); } catch (e) { toast(authErr(e)); } break;
-    case "auth-resend": try { await FB_AUTH.M.sendEmailVerification(FB_AUTH.auth.currentUser); toast("Sent. Check your inbox."); } catch (e) { toast(authErr(e)); } break;
-    case "auth-reset": { const f = document.getElementById("au-email"); const em = f ? f.value.trim() : ""; if (!em) { S.portalErr = "Type your email above, then press Forgot your password."; render(); break; } try { await FB_AUTH.M.sendPasswordResetEmail(FB_AUTH.auth, em); S.portalErr = ""; toast("If there's an account for " + em + ", a reset link is on its way."); } catch (e) { S.portalErr = authErr(e); render(); } break; }
     case "admin-remove": { const list = (S.admins || []).filter(x => x !== id); try { await db.doc("config/admins").set({ emails: list }); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
@@ -2185,6 +2179,18 @@ async function handleSubmit(e) {
     return;
   }
   if (kind === "profile") { await saveProfile(fd); return; }
+  if (kind === "my-password") {
+    const a = String(fd.get("pw1") || ""), b = String(fd.get("pw2") || "");
+    if (a.length < 8) { toast("Use at least 8 characters."); return; }
+    if (a !== b) { toast("The two passwords don't match."); return; }
+    const { M, auth } = FB_AUTH; const u = auth.currentUser; if (!u) return;
+    try {
+      if ((u.providerData || []).some(x => x.providerId === "password")) await M.updatePassword(u, a);
+      else await M.linkWithCredential(u, M.EmailAuthProvider.credential(u.email, a));
+      await u.reload(); S.authUser = auth.currentUser; e.target.reset(); toast("Password saved. You can sign in with it now."); render();
+    } catch (err) { toast(err && err.code === "auth/requires-recent-login" ? "For safety, sign out and sign in again, then set the password." : authErr(err)); }
+    return;
+  }
   if (kind === "admin-add") {
     const em = String(fd.get("email") || "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Add a valid email address."); return; }
