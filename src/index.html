@@ -1112,7 +1112,7 @@ async function saveProfile(fd) {
   try {
     await db.collection("clients").doc(cl.id).set(strip(cl));
     await db.collection("pets").doc(uid("p")).set(Object.assign({ clientId: cl.id, weight: 0, feeding: "", temperament: "", flags: [], vax: {} }, dog));
-    S.portalErr = ""; S.profileDraft = null;
+    S.portalErr = ""; S.profileDraft = null; DIRTY.ids.clear();
     await handleAuth(u);
     toast("Welcome to " + C().businessName + ", " + cl.name.split(" ")[0] + "!");
   } catch (e) { console.warn(e); S.portalErr = "Couldn't save your details. Check your connection and try again."; render(); }
@@ -1206,6 +1206,11 @@ function appBanners(v) {
   return h;
 }
 function needsYou() { return S.bookings.filter(b => b.status === "requested").length + unreadForTeam(); }
+// What someone has typed into a form survives the screen redrawing when live data arrives
+const DIRTY = { ids: new Set(), key: "" };
+document.addEventListener("input", e => { const t = e.target; if (t && t.id && !t.dataset.d && !t.dataset.q && t.type !== "file") DIRTY.ids.add(t.id); });
+document.addEventListener("change", e => { const t = e.target; if (t && t.id && (t.type === "checkbox" || t.type === "radio") && !t.dataset.d) DIRTY.ids.add(t.id); });
+function forget(form) { if (form && form.elements) [...form.elements].forEach(el => el.id && DIRTY.ids.delete(el.id)); }
 function render() { renderView(); fixLinks(); }
 function renderView() {
   const v = view(); const c = C();
@@ -1235,8 +1240,13 @@ function renderView() {
   if (S.modal) html += viewModal();
   if (S.toast) html += '<div class="toast" role="status"><span>' + esc(S.toast) + "</span>" + (S.toastUndo ? '<button type="button" data-act="undo">Undo</button>' : "") + "</div>";
   const active = document.activeElement; const aid = active && active.id; const pos = active && active.selectionStart;
+  const formKey = v + "|" + (S.modal ? S.modal.type + ":" + (S.modal.id || "") : "") + "|" + (S.adminTab || "") + "|" + (S.setTab || "");
+  if (formKey !== DIRTY.key) { DIRTY.ids.clear(); DIRTY.key = formKey; }
+  const typed = {};
+  DIRTY.ids.forEach(id => { const el = document.getElementById(id); if (el) typed[id] = (el.type === "checkbox" || el.type === "radio") ? { checked: el.checked } : { value: el.value }; });
   applyComfort();
   $app.innerHTML = html;
+  for (const id in typed) { const el = document.getElementById(id); if (!el || el.type === "file") continue; if ("checked" in typed[id]) el.checked = typed[id].checked; else el.value = typed[id].value; }
   unorphan($app);
   const chat = $app.querySelector("#chat"); if (chat) chat.scrollTop = chat.scrollHeight;
   document.body.classList.toggle("has-mbar", v === "book" && !S.done && !!$app.querySelector(".mbar"));
@@ -1713,7 +1723,7 @@ function dogFields(v, bind, idp) {
   v = v || {}; const draft = bind === "draft";
   const at = k => draft ? ' data-d="p_' + k + '"' : ' name="dog_' + k + '"';
   const val = k => esc(draft ? (S.draft["p_" + k] || "") : (v[k] || ""));
-  const radio = (k, label, opts) => '<div class="field"><span class="flabel" id="' + idp + k + '-l">' + label + '</span><div class="checks" role="radiogroup" aria-labelledby="' + idp + k + '-l" style="margin-top:6px">' + opts.map(([ov, ol]) => '<label><input type="radio"' + at(k) + ' value="' + ov + '"' + ((draft ? S.draft["p_" + k] : v[k]) === ov ? " checked" : "") + ">" + ol + "</label>").join("") + "</div></div>";
+  const radio = (k, label, opts) => '<div class="field"><span class="flabel" id="' + idp + k + '-l">' + label + '</span><div class="checks" role="radiogroup" aria-labelledby="' + idp + k + '-l" style="margin-top:6px">' + opts.map(([ov, ol]) => '<label><input type="radio" id="' + idp + k + "-" + ov.toLowerCase() + '"' + at(k) + ' value="' + ov + '"' + ((draft ? S.draft["p_" + k] : v[k]) === ov ? " checked" : "") + ">" + ol + "</label>").join("") + "</div></div>";
   const txt = (k, label, type, extra) => '<div class="field"><label for="' + idp + k + '">' + label + '</label><input type="' + (type || "text") + '" id="' + idp + k + '"' + at(k) + (extra || "") + ' value="' + val(k) + '"></div>';
   return '<div class="grid2">' + txt("name", "Dog name", "text", draft ? "" : " required") + txt("breed", "Dog breed") + radio("sex", "Dog sex", [["Male", "Male"], ["Female", "Female"]]) + txt("age", "Dog age", "text", ' placeholder="e.g. 4 years"') + radio("neutered", "Dog neutered", [["Yes", "Yes"], ["No", "No"]]) + txt("microchip", "Dog microchip number", "text", ' inputmode="numeric"') + "</div>" +
     '<div class="field"><label for="' + idp + 'vet">Vet name and address</label><textarea id="' + idp + 'vet"' + at("vet") + ' rows="2">' + val("vet") + "</textarea></div>" +
@@ -2221,7 +2231,7 @@ async function handleSubmit(e) {
     try {
       if ((u.providerData || []).some(x => x.providerId === "password")) await M.updatePassword(u, a);
       else await M.linkWithCredential(u, M.EmailAuthProvider.credential(u.email, a));
-      await u.reload(); S.authUser = auth.currentUser; e.target.reset(); toast("Password saved. You can sign in with it now."); render();
+      await u.reload(); S.authUser = auth.currentUser; forget(e.target); e.target.reset(); toast("Password saved. You can sign in with it now."); render();
     } catch (err) { toast(err && err.code === "auth/requires-recent-login" ? "For safety, sign out and sign in again, then set the password." : authErr(err)); }
     return;
   }
@@ -2229,7 +2239,7 @@ async function handleSubmit(e) {
     const em = String(fd.get("email") || "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Add a valid email address."); return; }
     const t = S.team || {}; const list = Array.from(new Set((t.emails || []).concat(em)));
-    try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list })); toast("Added " + em + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
+    try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list })); forget(e.target); toast("Added " + em + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
     return;
   }
   if (kind === "signin") {
