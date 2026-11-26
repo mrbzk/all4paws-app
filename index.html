@@ -244,6 +244,32 @@ td .row{gap:6px}
 .day h4{font-size:.9rem;display:flex;justify-content:space-between}
 .chip{font-size:.8rem;padding:6px 8px;border-radius:6px;background:var(--surface-2);border-left:3px solid var(--c-walk);line-height:1.3}
 .chip.boarding{border-left-color:var(--c-boarding)}.chip.daycare{border-left-color:var(--c-daycare)}.chip.groom{border-left-color:var(--c-groom)}
+.diary-bar{justify-content:space-between;align-items:center;gap:10px}
+.seg{display:inline-flex;gap:4px;flex-wrap:nowrap}
+.range-form{gap:8px;align-items:center}
+.range-form input[type=date]{width:auto;min-width:0;padding:6px 10px}
+.month{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.mhead{font-size:.75rem;font-weight:700;color:var(--muted);text-align:center;padding:2px 0}
+.mcell{all:unset;box-sizing:border-box;cursor:pointer;background:var(--surface);border:1px solid var(--line);border-radius:10px;padding:6px;min-height:96px;display:flex;flex-direction:column;gap:4px;overflow:hidden}
+.mcell:hover{border-color:var(--accent)}
+.mcell:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mcell.blank{background:transparent;border:0;cursor:default}
+.mcell.today{border-color:var(--accent);box-shadow:inset 0 0 0 1px var(--accent)}
+.mcell.sel{background:var(--surface-2);border-color:var(--accent)}
+.mcell.closed{background:repeating-linear-gradient(45deg,var(--surface),var(--surface) 6px,var(--surface-2) 6px,var(--surface-2) 12px)}
+.mtop{display:flex;justify-content:space-between;align-items:center}
+.mnum{font-weight:700;font-size:.85rem}
+.mcount{font-size:.7rem;background:var(--surface-2);border-radius:999px;padding:0 6px;font-weight:700}
+.mlist{display:flex;flex-direction:column;gap:2px;min-width:0}
+.mchip{font-size:.7rem;padding:1px 5px;border-radius:4px;background:var(--surface-2);border-left:3px solid var(--c-walk);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.mchip.boarding{border-left-color:var(--c-boarding)}.mchip.daycare{border-left-color:var(--c-daycare)}.mchip.groom{border-left-color:var(--c-groom)}
+.mdots{display:none;gap:3px;flex-wrap:wrap}
+.agenda{display:flex;flex-direction:column;gap:10px}
+.aday{background:var(--surface);border:1px solid var(--line);border-radius:var(--r);padding:10px}
+.aday.today{border-color:var(--accent)}
+.aday h4{font-size:.9rem;display:flex;justify-content:space-between;margin-bottom:6px}
+.agrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:6px}
+@media (max-width:640px){.month{gap:3px}.mcell{min-height:52px;padding:4px;border-radius:8px}.mlist{display:none}.mdots{display:flex}.mcount{display:none}.mhead{font-size:.65rem}.diary-bar{flex-direction:column;align-items:stretch}.range-form{display:grid;grid-template-columns:auto 1fr;gap:8px 10px}.range-form input[type=date]{width:100%}.range-form button{grid-column:1 / -1}}
 .chip.requested{border-style:dashed;border-width:1px 1px 1px 3px;border-color:var(--warn)}
 .gantt{border-collapse:separate;border-spacing:0}
 .gantt th,.gantt td{padding:6px 4px;text-align:center;border-bottom:1px solid var(--line);min-width:42px;font-size:.8rem}
@@ -1908,7 +1934,7 @@ function petCard(p, t, admin) {
 
 // ----- admin -----
 const GROUPS = [["today", "Today", ["today"]], ["diary", "Diary", ["schedule", "bookings", "kennel", "approvals"]], ["customers", "Customers", ["clients"]], ["money", "Money", ["billing"]], ["messages", "Messages", ["messages"]]];
-const SUB_LABEL = { schedule: "Week", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
+const SUB_LABEL = { schedule: "Calendar", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
 function groupOf(tab) { for (const g of GROUPS) if (g[2].includes(tab)) return g[0]; return tab === "settings" ? "settings" : "today"; }
 const ADM_IC = (d) => '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
 const GROUP_IC = {
@@ -2089,18 +2115,66 @@ function adminApprovals() {
   }).join("") + "</div>";
   return h;
 }
+function diaryChip(b, d) {
+  return '<div class="chip ' + b.cat + '"><strong>' + esc(petNames(b)) + "</strong><br>" + esc((svcById(b.serviceId) || {}).name || "") + ((b.addons || []).length ? " +" + b.addons.length : "") + '<br><span class="muted">' + esc(b.cat === "boarding" ? (b.date === d ? "Check-in" : b.endDate === d ? "Check-out" : "Staying") : (b.slot || "All day")) + (b.staffId ? " · " + esc(staffName(b.staffId)) : "") + "</span></div>";
+}
+function monthOf(d) { return d.slice(0, 7) + "-01"; }
+function addMonths(m, n) { const x = parse(m); x.setDate(1); x.setMonth(x.getMonth() + n); return iso(x).slice(0, 7) + "-01"; }
 function adminSchedule() {
-  const t = todayISO(); const start = S.weekStart || t;
-  const days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(start, i));
+  const t = todayISO(); const mode = S.diaryMode || "week";
   const live = S.bookings.filter(b => CONF.includes(b.status) || b.status === "completed");
-  const pendingWeek = S.bookings.filter(b => b.status === "requested" && days.some(d => onDay(b, d))).length;
-  let h = '<div class="head"><div><h2>Schedule</h2><p class="muted">Seven days from ' + esc(fmtDate(start, { day: "numeric", month: "long" })) + '. Only approved bookings appear here.' + (pendingWeek ? ' <button class="btn sm sun" data-act="tab" data-id="approvals">' + pendingWeek + ' waiting for approval</button>' : "") + '</p></div><div class="row"><button class="btn sm" data-act="week" data-id="-7">← Previous</button><button class="btn sm" data-act="week" data-id="0">This week</button><button class="btn sm" data-act="week" data-id="7">Next →</button></div></div>';
+  const itemsOn = d => live.filter(b => onDay(b, d)).sort((a, b) => slotRank(a) - slotRank(b));
+  const closedOn = d => (C().daysOff || []).includes(d);
+  let days, title, nav;
+  if (mode === "month") {
+    const m = S.monthStart || monthOf(t);
+    const last = addDays(addMonths(m, 1), -1);
+    days = []; for (let d = m; d <= last; d = addDays(d, 1)) days.push(d);
+    title = fmtDate(m, { month: "long", year: "numeric" }).replace(/ /g, " ");
+    nav = '<button class="btn sm" data-act="month" data-id="-1">← Previous</button><button class="btn sm" data-act="month" data-id="0">This month</button><button class="btn sm" data-act="month" data-id="1">Next →</button>';
+  } else if (mode === "custom") {
+    const from = S.rangeFrom || t, to = S.rangeTo || addDays(t, 13);
+    days = []; for (let d = from; d <= to && days.length < 366; d = addDays(d, 1)) days.push(d);
+    title = fmtDate(from, { day: "numeric", month: "short", year: "numeric" }).replace(/ /g, " ") + " to " + fmtDate(to, { day: "numeric", month: "short", year: "numeric" }).replace(/ /g, " ");
+    nav = "";
+  } else {
+    const start = S.weekStart || t;
+    days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(start, i));
+    title = "Seven days from " + fmtDate(start, { day: "numeric", month: "long" }).replace(/ /g, " ");
+    nav = '<button class="btn sm" data-act="week" data-id="-7">← Previous</button><button class="btn sm" data-act="week" data-id="0">This week</button><button class="btn sm" data-act="week" data-id="7">Next →</button>';
+  }
+  const inRange = b => days.some(d => onDay(b, d));
+  const pending = S.bookings.filter(b => b.status === "requested" && inRange(b)).length;
+  const count = live.filter(inRange).length;
+  const modes = [["week", "Week"], ["month", "Month"], ["custom", "Custom"]];
+  let h = '<div class="head"><div><h2>Schedule</h2><p class="muted">' + esc(title) + ". " + count + " booking" + (count === 1 ? "" : "s") + ". Only approved bookings appear here." + (pending ? ' <button class="btn sm sun" data-act="tab" data-id="approvals">' + pending + " waiting for approval</button>" : "") + '</p></div><div class="row">' + nav + "</div></div>";
+  h += '<div class="row diary-bar"><div class="seg" role="group" aria-label="Diary view">' + modes.map(([k, l]) => '<button class="btn sm' + (mode === k ? " primary" : "") + '" data-act="diary-mode" data-id="' + k + '" aria-pressed="' + (mode === k) + '">' + l + "</button>").join("") + "</div>";
+  if (mode === "custom") h += '<form class="row range-form" data-form="diary-range"><label class="small" for="dr-from">From</label><input type="date" id="dr-from" name="from" required value="' + esc(S.rangeFrom || t) + '"><label class="small" for="dr-to">To</label><input type="date" id="dr-to" name="to" required value="' + esc(S.rangeTo || addDays(t, 13)) + '"><button class="btn sm primary" type="submit">Show</button></form>';
+  h += "</div>";
   h += '<div class="row small">' + Object.keys(CAT_LABEL).map(k => '<span class="row" style="gap:5px"><span class="cat ' + k + '"></span>' + CAT_LABEL[k] + "</span>").join("") + "</div>";
-  h += '<div class="week">' + days.map(d => { const items = live.filter(b => onDay(b, d)).sort((a, b) => slotRank(a) - slotRank(b)); const closed = (C().daysOff || []).includes(d); return '<div class="day' + (d === t ? " today" : "") + (closed ? " closed" : "") + '"><h4><span>' + esc(fmtDate(d, { weekday: "short", day: "numeric" })) + '</span><span class="muted num">' + (closed ? "Closed" : items.length) + "</span></h4>" + (items.map(b => '<div class="chip ' + b.cat + "" + '"><strong>' + esc(petNames(b)) + "</strong><br>" + esc((svcById(b.serviceId) || {}).name || "") + ((b.addons || []).length ? " +" + b.addons.length : "") + '<br><span class="muted">' + esc(b.cat === "boarding" ? (b.date === d ? "Check-in" : b.endDate === d ? "Check-out" : "Staying") : (b.slot || "All day")) + (b.staffId ? " · " + esc(staffName(b.staffId)) : "") + "</span></div>").join("") || '<span class="small muted">Free</span>') + "</div>"; }).join("") + "</div>";
+  if (mode === "week") {
+    h += '<div class="week">' + days.map(d => { const items = itemsOn(d); const closed = closedOn(d); return '<div class="day' + (d === t ? " today" : "") + (closed ? " closed" : "") + '"><h4><span>' + esc(fmtDate(d, { weekday: "short", day: "numeric" })) + '</span><span class="muted num">' + (closed ? "Closed" : items.length) + "</span></h4>" + (items.map(b => diaryChip(b, d)).join("") || '<span class="small muted">Nothing booked</span>') + "</div>"; }).join("") + "</div>";
+  } else if (mode === "month") {
+    const lead = (parse(days[0]).getDay() + 6) % 7; // Monday first
+    const cells = Array(lead).fill(null).concat(days);
+    while (cells.length % 7) cells.push(null);
+    const sel = S.diaryDay && days.includes(S.diaryDay) ? S.diaryDay : null;
+    h += '<div class="month" role="grid" aria-label="' + esc(title) + '">' + ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(w => '<div class="mhead" role="columnheader">' + w + "</div>").join("") +
+      cells.map(d => { if (!d) return '<div class="mcell blank"></div>'; const items = itemsOn(d); const closed = closedOn(d); const cats = [...new Set(items.map(b => b.cat))];
+        return '<button class="mcell' + (d === t ? " today" : "") + (closed ? " closed" : "") + (d === sel ? " sel" : "") + '" data-act="diary-day" data-id="' + d + '" aria-label="' + esc(fmtDate(d, { weekday: "long", day: "numeric", month: "long" }).replace(/ /g, " ")) + ", " + (closed ? "closed" : items.length + " bookings") + '"><span class="mtop"><span class="mnum">' + parse(d).getDate() + "</span>" + (items.length ? '<span class="mcount num">' + items.length + "</span>" : closed ? '<span class="small muted">Closed</span>' : "") + "</span>" +
+          '<span class="mlist">' + items.slice(0, 3).map(b => '<span class="mchip ' + b.cat + '">' + esc(petNames(b)) + "</span>").join("") + (items.length > 3 ? '<span class="small muted">+' + (items.length - 3) + " more</span>" : "") + "</span>" +
+          '<span class="mdots">' + cats.map(c => '<span class="cat ' + c + '"></span>').join("") + "</span></button>"; }).join("") + "</div>";
+    if (sel) { const items = itemsOn(sel); h += '<div class="card stack"><h3>' + esc(fmtDate(sel, { weekday: "long", day: "numeric", month: "long" }).replace(/ /g, " ")) + "</h3>" + (items.map(b => diaryChip(b, sel)).join("") || '<p class="small muted">' + (closedOn(sel) ? "Closed." : "Nothing booked.") + "</p>") + "</div>"; }
+    else h += '<p class="small muted">Tap a day to see its bookings.</p>';
+  } else {
+    const withItems = days.map(d => ({ d, items: itemsOn(d) }));
+    const busy = withItems.filter(x => x.items.length || closedOn(x.d));
+    h += busy.length ? '<div class="agenda">' + busy.map(x => '<div class="aday' + (x.d === t ? " today" : "") + '"><h4><span>' + esc(fmtDate(x.d, { weekday: "short", day: "numeric", month: "short" })) + '</span><span class="muted num">' + (closedOn(x.d) ? "Closed" : x.items.length) + '</span></h4><div class="agrid">' + x.items.map(b => diaryChip(b, x.d)).join("") + "</div></div>").join("") + "</div>" : '<div class="empty">No approved bookings in these dates.</div>';
+  }
   // staff load
-  const loads = C().staff.map(s => ({ s, n: live.filter(b => b.staffId === s.id && days.some(d => onDay(b, d))).length, busiest: Math.max(0, ...days.map(d => live.filter(b => b.date === d && (b.cat === "walk" || b.cat === "groom") && b.staffId === s.id).length)) }));
-  const unassigned = live.filter(b => !b.staffId && CONF.includes(b.status) && days.some(d => onDay(b, d))).length;
-  h += '<div class="card"><h3 style="margin-bottom:8px">Team load this week</h3><div class="row">' + loads.map(x => '<span class="pill confirmed">' + esc(x.s.name) + " · " + x.n + (x.s.max ? " · busiest day " + x.busiest + " of " + x.s.max : "") + "</span>").join("") + (unassigned ? '<span class="pill requested">Unassigned · ' + unassigned + "</span>" : "") + "</div></div>";
+  const loads = C().staff.map(s => ({ s, n: live.filter(b => b.staffId === s.id && inRange(b)).length, busiest: Math.max(0, ...days.map(d => live.filter(b => b.date === d && (b.cat === "walk" || b.cat === "groom") && b.staffId === s.id).length)) }));
+  const unassigned = live.filter(b => !b.staffId && CONF.includes(b.status) && inRange(b)).length;
+  h += '<div class="card"><h3 style="margin-bottom:8px">Team load ' + (mode === "week" ? "this week" : mode === "month" ? "this month" : "in these dates") + '</h3><div class="row">' + loads.map(x => '<span class="pill confirmed">' + esc(x.s.name) + " · " + x.n + (x.s.max ? " · busiest day " + x.busiest + " of " + x.s.max : "") + "</span>").join("") + (unassigned ? '<span class="pill requested">Unassigned · ' + unassigned + "</span>" : "") + "</div></div>";
   return h;
 }
 function adminBookings() {
@@ -2353,6 +2427,9 @@ async function handleClick(e) {
     case "csel-go": S.cSel = id; S.adminTab = "clients"; render(); window.scrollTo(0, 0); break;
     case "client-approve": { const cl = client(id); if (cl) { await put("clients", Object.assign({}, cl, { approved: true })); toast(cl.name + " approved"); } break; }
     case "approve-clean": { const list = S.bookings.filter(b => b.status === "requested" && !approvalChecks(b).some(x => x.lvl !== "ok")); for (const b of list) await patchBooking(b.id, { status: "confirmed", staffId: b.staffId || defaultStaff(C(), b.cat).id, decision: { by: "Bulk approval", at: new Date().toISOString(), message: "" } }); toast(list.length + " approved and added to the diary"); break; }
+    case "diary-mode": S.diaryMode = id; render(); break;
+    case "month": S.monthStart = id === "0" ? null : addMonths(S.monthStart || monthOf(todayISO()), Number(id)); S.diaryDay = null; render(); break;
+    case "diary-day": S.diaryDay = S.diaryDay === id ? null : id; render(); break;
     case "week": S.weekStart = id === "0" ? null : addDays(S.weekStart || todayISO(), Number(id)); render(); break;
     case "csel": S.cSel = id; S.cAll = false; addRecent(id); render(); { const d = document.querySelector(".cdetail"); if (d && d.getBoundingClientRect().top > window.innerHeight * 0.6) d.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
     case "c-all": S.cAll = !S.cAll; render(); break;
@@ -2433,6 +2510,13 @@ async function handleSubmit(e) {
     return;
   }
   if (kind === "profile") { await saveProfile(fd); return; }
+  if (kind === "diary-range") {
+    const from = String(fd.get("from") || ""), to = String(fd.get("to") || "");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) { toast("Pick both dates."); return; }
+    if (to < from) { toast("The end date is before the start date."); return; }
+    if ((parse(to) - parse(from)) / 864e5 > 365) { toast("Pick a range of a year or less."); return; }
+    S.rangeFrom = from; S.rangeTo = to; forget(e.target); render(); return;
+  }
   if (kind === "xero-settings") {
     const x = { enabled: fd.get("enabled") === "on", accountCode: String(fd.get("accountCode") || "200").trim(), taxType: String(fd.get("taxType") || "No VAT"), prefix: String(fd.get("prefix") || "").trim().slice(0, 12), dueDays: Math.max(0, Math.min(90, Number(fd.get("dueDays")) || 14)) };
     try { await putCfg(Object.assign({}, S.cfg || {}, { xero: x })); forget(e.target); toast("Xero settings saved"); } catch (err) {}
