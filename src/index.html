@@ -114,7 +114,7 @@ body.admin-mode{padding-bottom:0!important}
 label{display:block;font-weight:600;font-size:.875rem;margin-bottom:4px}
 .field{display:flex;flex-direction:column;min-width:0}
 .field .hint{font-size:.8rem;color:var(--muted);margin-top:3px}
-input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],input[type=search],select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:40px}
+input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=url],input[type=password],input[type=search],select,textarea{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--surface);min-height:40px}
 textarea{min-height:80px;resize:vertical}
 .grid2{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
 .grid3{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px}
@@ -359,7 +359,7 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
 .drops{display:grid;grid-template-columns:1fr;gap:8px}
 .drop.cam{display:none}
 @media (max-width:860px), (pointer:coarse){
-  input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],input[type=search],select,textarea{font-size:16px}
+  input[type=text],input[type=email],input[type=tel],input[type=number],input[type=date],input[type=time],input[type=url],input[type=password],input[type=search],select,textarea{font-size:16px}
 }
 @media (pointer:coarse), (max-width:640px){
   .btn{min-height:44px}
@@ -1741,8 +1741,18 @@ function viewMeet() {
 function adminMeets() {
   const t = todayISO(); const all = (S.meetings || []).slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
   const up = all.filter(m => m.status === "booked" && m.date >= t), past = all.filter(m => !(m.status === "booked" && m.date >= t)).reverse().slice(0, 20);
-  const card = m => '<article class="card stack' + (m.status === "cancelled" ? " muted-card" : "") + '"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(fmtDate(m.date, { weekday: "short", day: "numeric", month: "short" })) + " · " + esc(m.start) + "–" + esc(m.end) + '</strong> <span class="pill ' + (m.status === "booked" ? "confirmed" : m.status === "done" ? "completed" : "declined") + '">' + (m.status === "booked" ? "Booked" : m.status === "done" ? "Done" : "Cancelled") + "</span>" + (m.eventId ? ' <span class="pill completed">In Google Calendar</span>' : "") + '<div><strong>' + esc(m.name) + "</strong> with " + esc(m.dogName || "their dog") + '</div><div class="small muted">' + esc(m.address || "") + " · " + esc(m.phone || "") + " · " + esc(m.email || "") + "</div>" + (m.notes ? '<div class="small" style="white-space:pre-wrap">' + esc(m.notes) + "</div>" : "") + "</div></div>" +
-    (m.status === "booked" ? '<div class="row acts"><a class="btn sm" href="tel:' + esc(String(m.phone || "").replace(/[^+0-9]/g, "")) + '">Call</a><a class="btn sm" href="mailto:' + esc(m.email) + '">Email</a><button class="btn sm" data-act="meet-ics-admin" data-id="' + esc(m.id) + '">Add to calendar</button><button class="btn sm primary" data-act="meet-done" data-id="' + esc(m.id) + '">Mark done</button><button class="btn sm ghost danger" data-act="meet-cancel" data-id="' + esc(m.id) + '">Cancel</button></div>' : "") + "</article>";
+  const editForm = m => '<form class="card stack" data-form="meet-edit" data-id="' + esc(m.id) + '"><h3>Edit Meet &amp; Greet</h3><div class="grid2">' +
+    '<div class="field"><label for="me-date">Date</label><input type="date" id="me-date" name="date" required value="' + esc(m.date) + '"></div>' +
+    '<div class="grid2" style="gap:8px"><div class="field"><label for="me-start">Start</label><input type="time" id="me-start" name="start" required step="300" value="' + esc(m.start) + '"></div><div class="field"><label for="me-end">End</label><input type="time" id="me-end" name="end" required step="300" value="' + esc(m.end) + '"></div></div>' +
+    '<div class="field"><label for="me-name">Name</label><input type="text" id="me-name" name="name" required maxlength="80" value="' + esc(m.name) + '"></div>' +
+    '<div class="field"><label for="me-dog">Dog\'s name</label><input type="text" id="me-dog" name="dogName" maxlength="60" value="' + esc(m.dogName || "") + '"></div>' +
+    '<div class="field"><label for="me-email">Email</label><input type="email" id="me-email" name="email" maxlength="120" value="' + esc(m.email || "") + '"></div>' +
+    '<div class="field"><label for="me-phone">Mobile</label><input type="tel" id="me-phone" name="phone" maxlength="30" value="' + esc(m.phone || "") + '"></div></div>' +
+    '<div class="field"><label for="me-addr">Address</label><input type="text" id="me-addr" name="address" maxlength="160" value="' + esc(m.address || "") + '"></div>' +
+    '<div class="field"><label for="me-notes">Notes</label><textarea id="me-notes" name="notes" rows="3" maxlength="1000">' + esc(m.notes || "") + "</textarea></div>" +
+    '<p class="small muted">You can pick any time here, even outside your usual hours. If you change the time, let ' + esc(String(m.name || "the customer").split(" ")[0]) + ' know.' + (m.eventId ? " The Google Calendar event is updated too." : "") + '</p><div class="row"><button class="btn primary" type="submit">Save changes</button><button class="btn ghost" type="button" data-act="meet-edit" data-id="">Cancel</button></div></form>';
+  const card = m => S.meetEdit === m.id && isOwner() ? editForm(m) : '<article class="card stack' + (m.status === "cancelled" ? " muted-card" : "") + '"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(fmtDate(m.date, { weekday: "short", day: "numeric", month: "short" })) + " · " + esc(m.start) + "–" + esc(m.end) + '</strong> <span class="pill ' + (m.status === "booked" ? "confirmed" : m.status === "done" ? "completed" : "declined") + '">' + (m.status === "booked" ? "Booked" : m.status === "done" ? "Done" : "Cancelled") + "</span>" + (m.eventId ? ' <span class="pill completed">In Google Calendar</span>' : "") + '<div><strong>' + esc(m.name) + "</strong> with " + esc(m.dogName || "their dog") + '</div><div class="small muted">' + esc(m.address || "") + " · " + esc(m.phone || "") + " · " + esc(m.email || "") + "</div>" + (m.notes ? '<div class="small" style="white-space:pre-wrap">' + esc(m.notes) + "</div>" : "") + "</div></div>" +
+    (m.status === "booked" ? '<div class="row acts"><a class="btn sm" href="tel:' + esc(String(m.phone || "").replace(/[^+0-9]/g, "")) + '">Call</a><a class="btn sm" href="mailto:' + esc(m.email) + '">Email</a><button class="btn sm" data-act="meet-ics-admin" data-id="' + esc(m.id) + '">Add to calendar</button>' + (isOwner() ? '<button class="btn sm" data-act="meet-edit" data-id="' + esc(m.id) + '">Edit</button>' : "") + '<button class="btn sm primary" data-act="meet-done" data-id="' + esc(m.id) + '">Mark done</button><button class="btn sm ghost danger" data-act="meet-cancel" data-id="' + esc(m.id) + '">Cancel</button></div>' : "") + "</article>";
   let h = '<div class="head"><div><h2>Meet &amp; Greets</h2><p class="muted">Booked from the website. ' + (up.length ? up.length + " coming up." : "None coming up.") + (isOwner() ? ' Set your available times in Settings, Meet &amp; Greets.' : "") + "</p></div></div>";
   h += up.length ? up.map(card).join("") : '<div class="empty">No Meet &amp; Greets booked yet.</div>';
   if (past.length) h += '<h3 style="margin-top:10px">Earlier and cancelled</h3>' + past.map(card).join("");
@@ -2568,6 +2578,7 @@ async function handleClick(e) {
     case "meet-slot": S.meet = Object.assign({}, S.meet, { slot: Number(id), err: "" }); render(); { const f = document.getElementById("mg-name"); if (f) f.scrollIntoView({ behavior: "smooth", block: "center" }); } break;
     case "meet-ics": { const m = S.meet && S.meet.done; if (m) await downloadText("meet-and-greet.ics", icsFor(m)); break; }
     case "meet-ics-admin": { const m = (S.meetings || []).find(x => x.id === id); if (m) await downloadText("meet-and-greet-" + m.date + ".ics", icsFor(m)); break; }
+    case "meet-edit": S.meetEdit = id || null; render(); if (id) { const f = document.getElementById("me-date"); if (f) f.focus(); } break;
     case "meet-done": { const m = (S.meetings || []).find(x => x.id === id); if (m) { await put("meetings", Object.assign({}, m, { status: "done" })); toast("Marked done"); } break; }
     case "meet-cancel": { const m = (S.meetings || []).find(x => x.id === id); if (!m || !confirm("Cancel this Meet & Greet? Let " + m.name + " know too.")) break;
       await put("meetings", Object.assign({}, m, { status: "cancelled" }));
@@ -2750,6 +2761,26 @@ async function handleSubmit(e) {
     const n = (k, lo, hi, dflt) => Math.max(lo, Math.min(hi, Math.round(Number(fd.get(k))) || dflt));
     const mc = { enabled: fd.get("enabled") === "on", duration: n("duration", 10, 180, 30), buffer: n("buffer", 0, 120, 15), notice: Math.max(0, Math.min(336, Math.round(Number(fd.get("notice"))) || 0)), ahead: n("ahead", 1, 90, 28), location: String(fd.get("location") || "").trim().slice(0, 80) || "At your home", days };
     try { await putCfg(Object.assign({}, S.cfg || {}, { meet: mc })); forget(e.target); toast("Meet & Greet times saved"); } catch (err) {}
+    return;
+  }
+  if (kind === "meet-edit") {
+    const id = e.target.dataset.id; const m = (S.meetings || []).find(x => x.id === id); if (!m || !isOwner()) return;
+    const g = k => String(fd.get(k) || "").trim();
+    const date = g("date"), start = g("start"), end = g("end");
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !/^\d{2}:\d{2}$/.test(start) || !/^\d{2}:\d{2}$/.test(end)) { toast("Pick a date, start and end time."); return; }
+    if (toMins(end) <= toMins(start)) { toast("The end time is before the start time."); return; }
+    if (!g("name")) { toast("Add a name."); return; }
+    const clash = (S.meetings || []).find(x => x.id !== id && x.status === "booked" && x.date === date && toMins(start) < toMins(x.end) && toMins(end) > toMins(x.start));
+    if (clash && !confirm("This overlaps " + clash.name + "'s Meet & Greet at " + clash.start + ". Save anyway?")) return;
+    const next = Object.assign({}, m, { date, start, end, name: g("name").slice(0, 80), dogName: g("dogName").slice(0, 60), email: g("email").toLowerCase().slice(0, 120), phone: g("phone").slice(0, 30), address: g("address").slice(0, 160), notes: g("notes").slice(0, 1000) });
+    try {
+      await put("meetings", next);
+      if (S.mode === "live") {
+        await db.collection("meetbusy").doc(id).set({ date, start, end }).catch(() => {});
+        if (m.eventId) callFn("meetUpdateEvent", { id }).catch(() => {});
+      }
+      S.meetEdit = null; forget(e.target); toast("Meet & Greet updated"); render();
+    } catch (er) {}
     return;
   }
   if (kind === "meet-book") {

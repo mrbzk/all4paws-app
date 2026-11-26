@@ -322,3 +322,21 @@ exports.meetRemoveEvent = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRE
   await ref.update({ eventId: admin.firestore.FieldValue.delete() });
   return { ok: true };
 });
+
+// Team: an admin edited a Meet & Greet, so move or update its Google Calendar event
+exports.meetUpdateEvent = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireOwner(req.auth);
+  const id = String((req.data || {}).id || ""); const snap = await db.doc("meetings/" + id).get();
+  if (!snap.exists || !snap.data().eventId) return { ok: false };
+  const m = snap.data(); const acc = await gAccess().catch(() => null); if (!acc) return { ok: false };
+  const biz = (await mainCfg()).businessName || "ALL4PAWS";
+  try {
+    await gApi(acc, "PATCH", "/calendars/" + encodeURIComponent(acc.calendarId) + "/events/" + encodeURIComponent(m.eventId), {
+      summary: "Meet & Greet: " + (m.name || "") + " with " + (m.dogName || "their dog"),
+      location: m.address || "",
+      description: [biz + " Meet & Greet.", "Phone: " + (m.phone || ""), "Email: " + (m.email || ""), m.notes ? "Notes: " + m.notes : ""].filter(Boolean).join("\n"),
+      start: { dateTime: m.date + "T" + m.start + ":00", timeZone: TZ }, end: { dateTime: m.date + "T" + m.end + ":00", timeZone: TZ }
+    });
+    return { ok: true };
+  } catch (e) { return { ok: false }; }
+});
