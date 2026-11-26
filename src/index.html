@@ -1082,10 +1082,10 @@ const XERO_COLS = ["*ContactName", "EmailAddress", "POAddressLine1", "POAddressL
 const xeroCfg = () => Object.assign({}, XERO_DEFAULT, C().xero || {});
 const stripeCfg = () => Object.assign({}, STRIPE_DEFAULT, C().stripe || {});
 const ukDate = iso => iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "";
-function xeroEligible(includeSent) { return S.bookings.filter(b => b.status === "completed" && !b.paid && (includeSent || !b.xeroAt) && b.clientId); }
-function xeroExport(includeSent) {
+function xeroEligible(includeSent, onlyClient) { return S.bookings.filter(b => b.status === "completed" && !b.paid && (includeSent || !b.xeroAt) && b.clientId && (!onlyClient || b.clientId === onlyClient)); }
+function xeroExport(includeSent, onlyClient) {
   const x = xeroCfg(); const t = todayISO(); const due = addDays(t, Number(x.dueDays) || 14);
-  const list = xeroEligible(includeSent); const byClient = {};
+  const list = xeroEligible(includeSent, onlyClient); const byClient = {};
   list.forEach(b => (byClient[b.clientId] = byClient[b.clientId] || []).push(b));
   const rows = []; const used = new Set();
   Object.keys(byClient).forEach(cid => {
@@ -2228,27 +2228,23 @@ function adminClients() {
   return h;
 }
 function adminBilling() {
-  const t = todayISO(); const month = t.slice(0, 7);
-  const done = S.bookings.filter(b => b.status === "completed");
-  const unpaid = done.filter(b => !b.paid);
+  const unpaid = S.bookings.filter(b => b.status === "completed" && !b.paid);
   const byClient = {};
   unpaid.forEach(b => { (byClient[b.clientId] = byClient[b.clientId] || []).push(b); });
-  const rev = done.filter(b => b.date.slice(0, 7) === month).reduce((s, b) => s + (b.price || 0), 0);
-  const collected = done.filter(b => b.date.slice(0, 7) === month).reduce((s, b) => s + (b.paid ? (b.price || 0) : (Number(b.depositPaid) || 0)), 0);
-  const booked = S.bookings.filter(b => ACTIVE.includes(b.status) && b.date >= t).reduce((s, b) => s + (b.price || 0), 0);
-  const byCat = Object.keys(CAT_LABEL).map(k => ({ k, v: done.filter(b => b.cat === k && b.date.slice(0, 7) === month).reduce((s, b) => s + (b.price || 0), 0) }));
-  const max = Math.max(1, ...byCat.map(x => x.v));
-  const owe = Object.keys(byClient).length; const oweAmt = unpaid.reduce((s0, b) => s0 + owedOf(b), 0);
-  let h = '<div class="head"><div><h2>Money</h2><p class="muted">A weekly routine: export, send invoices from your invoicing tool, then mark them paid here.</p></div></div>';
-  h += '<div class="card headline">' + (owe ? '<p class="say"><strong>' + owe + (owe === 1 ? " person owes" : " people owe") + " you " + money(oweAmt) + '.</strong></p><div class="row acts">' + (xeroCfg().enabled ? '<button class="btn primary" data-act="xero-export">Export to Xero</button><button class="btn" data-act="csv-all">Export invoices</button>' : '<button class="btn primary" data-act="csv-all">Export invoices</button>') + '<button class="btn" data-act="copy-all">Copy lines</button></div>' : '<p class="say"><strong>Everyone has paid.</strong> Nothing to chase.</p>') + "</div>";
-  h += '<h3 style="margin-top:6px">This month</h3>';
-  h += '<div class="kpis" style="grid-template-columns:repeat(4,minmax(0,1fr))"><div class="kpi"><div class="v num">' + money(rev) + '</div><div class="l">Earned this month</div></div><div class="kpi"><div class="v num">' + money(collected) + '</div><div class="l">Collected this month</div></div><div class="kpi"><div class="v num" style="color:var(--bad)">' + money(unpaid.reduce((s, b) => s + (b.price || 0), 0)) + '</div><div class="l">Outstanding</div></div><div class="kpi"><div class="v num">' + money(booked) + '</div><div class="l">Booked ahead</div></div></div>';
-  const cids = Object.keys(byClient);
-  h += '<div class="row" style="justify-content:space-between"><h3>Who owes what</h3></div><p class="small muted" style="margin-top:-8px">One line per dog per completed visit. Copy or export to build invoices in Xero, QuickBooks, FreshBooks, Stripe or a spreadsheet. Invoice numbers are suggestions; due date is 14 days from today.</p>';
-  h += cids.length ? cids.map(cid => { const cl = client(cid) || {}; const items = byClient[cid].sort((a, b) => a.date.localeCompare(b.date)); const tot = items.reduce((s, b) => s + (b.price || 0), 0); const nLines = items.reduce((n, b) => n + linesFor(b).length, 0);
-    return '<div class="card stack"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(cl.name || "Unknown") + '</strong><div class="small muted">' + esc(cl.email || "") + (cl.phone ? " · " + esc(cl.phone) : "") + (cl.address ? " · " + esc(cl.address) : "") + '</div><div class="small muted num">Suggested invoice ' + esc(invoiceNo(cl)) + " · " + items.length + " visit" + (items.length > 1 ? "s" : "") + ", " + nLines + " line" + (nLines > 1 ? "s" : "") + '</div></div><div class="row"><button class="btn sm" data-act="copy-client" data-id="' + esc(cid) + '">Copy lines</button><button class="btn sm" data-act="csv-client" data-id="' + esc(cid) + '">CSV</button><button class="btn sm primary" data-act="pay-all" data-id="' + esc(cid) + '">Mark all paid</button></div></div>' +
-      '<div class="tbl-wrap"><table class="inv resp"><thead><tr><th>Date</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Amount</th><th></th></tr></thead><tbody>' + items.map(b => lineTable(b, true)).join("") + '</tbody><tfoot><tr><td></td><td colspan="3" style="text-align:right" class="tdue"><strong>Total due</strong></td><td class="num" data-label="Total due"><strong>' + money(tot) + "</strong></td><td></td></tr></tfoot></table></div></div>"; }).join("") : '<div class="empty">Nothing waiting for payment.</div>';
-  h += '<div class="card stack"><h3>This month by service</h3>' + byCat.map(x => '<div><div class="row" style="justify-content:space-between"><span class="row" style="gap:6px;flex-wrap:nowrap"><span class="cat ' + x.k + '"></span>' + CAT_LABEL[x.k] + '</span><span class="num">' + money(x.v) + '</span></div><div class="meter" style="height:10px"><i style="width:' + Math.round(x.v / max * 100) + "%;background:var(--c-" + x.k + ')"></i></div></div>').join("") + "</div>";
+  const cids = Object.keys(byClient).sort((a, b) => ((client(a) || {}).name || "").localeCompare((client(b) || {}).name || ""));
+  const oweAmt = unpaid.reduce((s0, b) => s0 + owedOf(b), 0);
+  const xOn = xeroCfg().enabled; const toSend = xOn ? xeroEligible(false).length : 0;
+  let h = '<div class="head"><div><h2>Outstanding invoices</h2><p class="muted">Completed visits that haven\'t been paid yet. ' + (xOn ? "Send them to Xero to invoice, then mark them paid when the money arrives." : "Mark them paid when the money arrives.") + "</p></div></div>";
+  h += '<div class="card headline">' + (cids.length
+    ? '<p class="say"><strong>' + cids.length + (cids.length === 1 ? " person owes" : " people owe") + " you " + money(oweAmt) + ".</strong>" + (xOn ? " " + (toSend ? toSend + " visit" + (toSend === 1 ? " hasn't" : "s haven't") + " been sent to Xero yet." : "Everything has been sent to Xero.") : "") + "</p>" +
+      (xOn ? '<div class="row acts"><button class="btn primary" data-act="xero-export"' + (toSend ? "" : " disabled") + '>Send all to Xero</button><label class="small row" style="gap:6px"><input type="checkbox" id="xero-again"> Include ones already sent</label></div><p class="small muted">This downloads an invoice file. In Xero, open Invoices, choose Import and pick the file.</p>' : '<p class="small muted">To send invoices to Xero, turn on the Xero export in Settings, Integrations.</p>')
+    : '<p class="say"><strong>Everyone has paid.</strong> Nothing to chase.</p>') + "</div>";
+  h += cids.map(cid => { const cl = client(cid) || {}; const items = byClient[cid].sort((a, b) => a.date.localeCompare(b.date)); const tot = items.reduce((s0, b) => s0 + owedOf(b), 0);
+    const sent = items.filter(b => b.xeroAt); const last = sent.map(b => b.xeroAt).sort().pop();
+    const status = !xOn ? "" : sent.length === items.length ? '<span class="pill confirmed">Sent to Xero ' + esc(fmtDate(last.slice(0, 10), { day: "numeric", month: "short" })) + "</span>" : sent.length ? '<span class="pill requested">' + (items.length - sent.length) + " new since last sent</span>" : '<span class="pill requested">Not sent to Xero</span>';
+    return '<div class="card stack"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(cl.name || "Unknown") + "</strong> " + status + '<div class="small muted">' + esc(cl.email || "") + (cl.phone ? " · " + esc(cl.phone) : "") + '</div><div class="small muted num">' + items.length + " visit" + (items.length > 1 ? "s" : "") + " · " + money(tot) + " owed</div></div>" +
+      '<div class="row">' + (xOn ? '<button class="btn sm" data-act="xero-client" data-id="' + esc(cid) + '">' + (sent.length === items.length ? "Send again" : "Send to Xero") + "</button>" : "") + '<button class="btn sm primary" data-act="pay-all" data-id="' + esc(cid) + '">Mark all paid</button></div></div>' +
+      '<div class="tbl-wrap"><table class="inv resp"><thead><tr><th>Date</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Amount</th><th></th></tr></thead><tbody>' + items.map(b => lineTable(b, true)).join("") + '</tbody><tfoot><tr><td></td><td colspan="3" style="text-align:right" class="tdue"><strong>Total due</strong></td><td class="num" data-label="Total due"><strong>' + money(tot) + "</strong></td><td></td></tr></tfoot></table></div></div>"; }).join("");
   return h;
 }
 const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["integrations", "Integrations"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
@@ -2370,10 +2366,10 @@ async function handleClick(e) {
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
     case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo(0, 0); break;
-    case "xero-export": {
-      const again = !!(document.getElementById("xero-again") || {}).checked; const out = xeroExport(again);
+    case "xero-export": case "xero-client": {
+      const again = act === "xero-client" ? true : !!(document.getElementById("xero-again") || {}).checked; const out = xeroExport(again, act === "xero-client" ? id : null);
       if (!out.rows.length) { toast("Nothing to export."); break; }
-      const ok = await downloadText("xero-invoices-" + todayISO() + ".csv", csvOf(XERO_COLS, out.rows));
+      const ok = await downloadText("xero-invoices-" + (act === "xero-client" ? String((client(id) || {}).name || "client").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") + "-" : "") + todayISO() + ".csv", csvOf(XERO_COLS, out.rows));
       if (!ok) { S.modal = { type: "copy", text: csvOf(XERO_COLS, out.rows), csv: true }; render(); break; }
       const at = new Date().toISOString();
       for (const b of out.bookings) { try { await patchBooking(b.id, { xeroAt: at }); } catch (e) { break; } }
