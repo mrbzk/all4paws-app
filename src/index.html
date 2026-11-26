@@ -597,6 +597,11 @@ html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--w
 .cat.portrait{background:var(--accent)}
 .soon-pill{background:var(--accent);color:var(--accent-ink);margin-right:6px;vertical-align:2px}
 .about-copy p{font-size:1.08rem;margin:0 0 14px;max-width:56ch}
+.contact-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
+@media (max-width:760px){.contact-grid{grid-template-columns:1fr}}
+.contact-card p{margin:0}.big-link{font-size:1.1rem;font-weight:700}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
+.muted-card{opacity:.75}
 .about-copy{margin-top:18px}.about-copy h2{margin-bottom:10px}
 .team{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:12px;margin-top:12px}
 footer a{color:inherit}
@@ -643,7 +648,7 @@ footer a{color:inherit}
 <body>
 <div id="app"></div>
 <script>
-const ROUTES = ["home", "book", "messages", "portal", "admin", "about", "portraits"];
+const ROUTES = ["home", "book", "messages", "portal", "admin", "about", "portraits", "contact"];
 const USE_PATHS = !!document.querySelector('link[rel="manifest"]') && (location.protocol === "https:" || location.hostname === "localhost");
 // ===== CORE (pure logic, also used to build the seed data) =====
 const DEFAULT_CFG = {
@@ -923,7 +928,7 @@ const S = {
   canAdmin: true, me: null, adminTab: "today", modal: null, toast: "",
   bFilter: "upcoming", cQuery: "", cSel: null, draft: { repeat: 1 }, done: null, portalEmail: "", portalErr: "",
   errors: [], netNote: "", updates: [], messages: [], days: [], thread: null, cmp: null, staffId: "", assets: null,
-  lastSub: {}, showNums: false, setTab: "business", undo: null, toastUndo: false
+  lastSub: {}, enquiries: [], role: "admin", showNums: false, setTab: "business", undo: null, toastUndo: false
 };
 let db = null;
 const $app = document.getElementById("app");
@@ -983,7 +988,8 @@ async function patchBooking(id, changes) { const b = S.bookings.find(x => x.id =
 
 function startDemo() {
   const s = makeSample(todayISO());
-  S.mode = "demo"; S.cfg = null; S.clients = s.clients; S.pets = s.pets; S.bookings = s.bookings; S.updates = []; S.messages = s.messages; S.days = []; S.canAdmin = true;
+  S.mode = "demo"; S.cfg = null; S.clients = s.clients; S.pets = s.pets; S.bookings = s.bookings; S.updates = []; S.messages = s.messages; S.days = []; S.canAdmin = true; S.role = "admin";
+  S.enquiries = [{ id: "enq-demo", name: "Sophie Turner", email: "sophie@example.com", phone: "07700 900222", message: "Hi! Do you have space for a cockapoo for daycare two days a week from January?", at: new Date(Date.now() - 3 * 3600e3).toISOString(), status: "new" }];
   render();
 }
 // Firebase (Firestore + Storage) adapter with the same calls the app already uses. Used by the installable app on its own domain.
@@ -1226,7 +1232,7 @@ function startAuth() {
 }
 async function handleAuth(user) {
   unsubAll();
-  Object.assign(S, { authUser: user || null, authReady: true, me: null, canAdmin: false, needsProfile: false, needsVerify: false, clients: [], pets: [], myBookings: [], messages: [], updates: [], days: [], admins: null });
+  Object.assign(S, { authUser: user || null, authReady: true, me: null, canAdmin: false, role: "admin", enquiries: [], needsProfile: false, needsVerify: false, clients: [], pets: [], myBookings: [], messages: [], updates: [], days: [], admins: null });
   mergeBookings();
   if (!user) { render(); return; }
   const em = String(user.email || "").toLowerCase();
@@ -1236,14 +1242,15 @@ async function handleAuth(user) {
   try {
     const a = await db.doc("config/admins").get(); const d = a.exists ? a.data() : null;
     if (d && ((d.emails || []).map(x => String(x).toLowerCase()).includes(em) || (d.staffUids || {})[user.uid])) {
-      S.canAdmin = true;
+      S.canAdmin = true; S.role = roleOf(d, em);
       // Remember this account, so a password sign-in works as well as Google
       if (!(d.staffUids || {})[user.uid]) { try { await db.doc("config/admins").set(Object.assign({}, d, { staffUids: Object.assign({}, d.staffUids || {}, { [user.uid]: em }) })); } catch (e) { console.warn("staff uid", e); } }
     } else S.staffCheck = a.exists ? "not on the list" : "no team list";
   }
   catch (e) { S.staffCheck = (e && e.code) || "error"; console.warn("staff check", e); }
   if (S.canAdmin) {
-    keep(db.doc("config/admins").onSnapshot(sn => { S.team = sn.exists ? sn.data() : { emails: [] }; S.admins = S.team.emails || []; render(); }, liveFail));
+    keep(db.doc("config/admins").onSnapshot(sn => { S.team = sn.exists ? sn.data() : { emails: [] }; S.admins = S.team.emails || []; S.role = roleOf(S.team, em); render(); }, liveFail));
+    if (S.role !== "staff") keep(db.collection("enquiries").onSnapshot(snap => { S.enquiries = rowsOf(snap); render(); }, () => {}));
     for (const coll of ["clients", "pets", "bookings", "updates", "messages", "days"]) keep(db.collection(coll).onSnapshot(snap => { const rows = rowsOf(snap); if (coll === "bookings") { S.myBookings = rows; mergeBookings(); } else S[coll] = rows; render(); }, liveFail));
     if (view() === "portal") navTo("admin");
     render(); return;
@@ -1337,6 +1344,7 @@ function fixLinks() { if (!USE_PATHS) return; document.querySelectorAll('a[href^
 const LOGO = '<img class="logo-img" src="img/logo-160.png" alt="" width="44" height="44">';
 
 const NAV_IC = {
+  contact: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>',
   about: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.8 4.6a5.5 5.5 0 0 0-7.8 0L12 5.7l-1-1.1a5.5 5.5 0 0 0-7.8 7.8L12 21l8.8-8.6a5.5 5.5 0 0 0 0-7.8z"/></svg>',
   home: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11l9-7 9 7v9a1 1 0 0 1-1 1h-5v-6h-6v6H4a1 1 0 0 1-1-1z"/></svg>',
   book: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18M12 14v4M10 16h4"/></svg>',
@@ -1407,7 +1415,7 @@ function renderView() {
   const isAdmin = v === "admin" && S.canAdmin;
   if (v !== "admin") S.lastCustView = v;
   // Signed-in staff see Back office in place of Account; everyone else signs in to the back office from the footer
-  const nav = isAdmin ? [] : [["about", "About us"], ["book", "Book"], S.canAdmin ? ["admin", "Back office"] : ["portal", "Account"]];
+  const nav = isAdmin ? [] : [["about", "About us"], ["contact", "Contact"], ["book", "Book"], S.canAdmin ? ["admin", "Back office"] : ["portal", "Account"]];
   const nY = needsYou() && !isQuiet() ? needsYou() : 0;
   const modeSw = isAdmin ? '<a class="viewsite" href="#home"><span aria-hidden="true">←</span> View site</a>' : "";
   document.body.classList.toggle("admin-mode", isAdmin);
@@ -1419,13 +1427,14 @@ function renderView() {
   if (S.mode === "loading") html += '<div class="wrap" style="padding:60px 20px"><p class="muted">Loading bookings…</p></div>';
   else if (v === "home") html += viewHome();
   else if (v === "about") html += viewAbout();
+  else if (v === "contact") html += viewContact();
   else if (v === "portraits") html += viewPortraits();
   else if (v === "book") html += viewBook();
   else if (v === "portal") html += viewPortal();
   else if (v === "messages") html += viewMessages();
   else if (v === "admin") html += S.canAdmin ? viewAdmin() : S.fb ? liveAuthView(true) : '<div class="wrap" style="padding:60px 20px"><div class="empty">The back office is for the team only.</div></div>';
   const bank = c.bank || DEFAULT_CFG.bank;
-  if (v !== "admin") html += '<footer><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#home">Services</a> · <a href="#portraits">Pet Portraits</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div><div class="wrap payline small">Need to make a payment? ' + esc(bank.name) + ' · <span class="num">Sort code ' + esc(bank.sort) + '</span> · Account number <span class="num">' + esc(bank.account) + '</span></div></footer>';
+  if (v !== "admin") html += '<footer><div class="wrap row" style="justify-content:space-between"><span>' + esc(c.businessName) + ' · <a href="#about">About us</a> · <a href="#contact">Contact</a> · <a href="#home">Services</a> · <a href="#portraits">Pet Portraits</a></span><span class="num">' + esc(c.phone) + " · " + esc(c.email) + ' · <button class="linkbtn" data-act="comfort-open">Display options</button>' + (S.fb && !S.canAdmin ? ' · <a href="#admin">Staff sign in</a>' : "") + '</span></div><div class="wrap payline small">Need to make a payment? ' + esc(bank.name) + ' · <span class="num">Sort code ' + esc(bank.sort) + '</span> · Account number <span class="num">' + esc(bank.account) + '</span></div></footer>';
   if (S.modal) html += viewModal();
   if (S.toast) html += '<div class="toast" role="status"><span>' + esc(S.toast) + "</span>" + (S.toastUndo ? '<button type="button" data-act="undo">Undo</button>' : "") + "</div>";
   const active = document.activeElement; const aid = active && active.id; const pos = active && active.selectionStart;
@@ -1626,6 +1635,29 @@ function viewPortraits() {
     "<p>Whether you're looking to commission a portrait of your own dog, create a meaningful birthday or anniversary gift, or preserve the memory of a much-loved companion, these bespoke artworks offer a timeless keepsake to treasure for years to come.</p>" +
     "<p>I'm so pleased to be able to offer access to such beautiful, individually crafted artwork and look forward to sharing more with you soon.</p>" +
     '<p class="muted">Nicole</p><div class="row">' + cta + "</div></div></div></section>";
+}
+function isOwner() { return !!S.canAdmin && S.role !== "staff"; }
+function roleOf(team, em) { return ((team && team.roles) || {})[String(em || "").toLowerCase()] === "staff" ? "staff" : "admin"; }
+function newEnquiries() { return isOwner() ? (S.enquiries || []).filter(x => x.status !== "done").length : 0; }
+function viewContact() {
+  const c = C(); const me = S.me ? client(S.me) : null;
+  const phone = String(c.phone || ""); const email = String(c.email || "");
+  const det = '<div class="card stack contact-card"><h3>Other ways to reach us</h3>' +
+    (phone ? '<p><span class="muted small">Phone or WhatsApp</span><br><a class="big-link" href="tel:' + esc(phone.replace(/[^+0-9]/g, "")) + '">' + esc(phone) + "</a></p>" : "") +
+    (email ? '<p><span class="muted small">Email</span><br><a class="big-link" href="mailto:' + esc(email) + '">' + esc(email) + "</a></p>" : "") +
+    (c.area ? '<p><span class="muted small">Area we cover</span><br>' + esc(c.area) + "</p>" : "") +
+    '<p class="small muted">Already a customer? You can also message us from your <a href="#portal">account</a>.</p></div>';
+  const form = S.contactSent
+    ? '<div class="card stack"><h3>Thanks, ' + esc(S.contactSent) + "!</h3><p>Your message has reached the team. We'll get back to you soon.</p><div class=\"row\"><button class=\"btn\" data-act=\"contact-again\">Send another message</button><a class=\"btn primary\" href=\"#book\">Book now</a></div></div>"
+    : '<form class="card stack" data-form="contact" novalidate><h3>Send us a message</h3><div class="grid2"><div class="field"><label for="ct-name">Your name</label><input type="text" id="ct-name" name="name" autocomplete="name" required maxlength="80" value="' + esc(me ? me.name || "" : "") + '"></div><div class="field"><label for="ct-email">Email</label><input type="email" id="ct-email" name="email" autocomplete="email" required maxlength="120" value="' + esc(me ? me.email || "" : "") + '"></div></div><div class="field"><label for="ct-phone">Phone <span class="muted small">(optional)</span></label><input type="tel" id="ct-phone" name="phone" autocomplete="tel" maxlength="30" value="' + esc(me ? me.phone || "" : "") + '"></div><div class="field"><label for="ct-msg">How can we help?</label><textarea id="ct-msg" name="message" rows="5" required maxlength="2000" placeholder="Tell us about your dog and what you\'re looking for"></textarea></div><div class="hp" aria-hidden="true"><label for="ct-web">Leave this empty</label><input type="text" id="ct-web" name="website" tabindex="-1" autocomplete="off"></div>' + (S.contactErr ? '<p class="err" role="alert">' + esc(S.contactErr) + "</p>" : "") + '<div class="row"><button class="btn primary" type="submit">Send message</button></div></form>';
+  return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">Contact</p><h1 class="quote">Get in touch</h1><div class="about-copy"><p>Questions about walks, daycare, overnight stays or grooming? Send us a message and the team will get back to you.</p></div></div></div></section><section class="block" style="padding-top:0"><div class="wrap contact-grid">' + form + det + "</div></section>";
+}
+function adminEnquiries() {
+  const list = (S.enquiries || []).slice().sort((a, b) => String(b.at || "").localeCompare(String(a.at || "")));
+  const open = list.filter(x => x.status !== "done");
+  let h = '<div class="head"><div><h2>Contact form</h2><p class="muted">Messages sent from the Contact page. Only admins see these. ' + (open.length ? open.length + " to answer." : "All answered.") + "</p></div></div>";
+  if (!list.length) return h + '<div class="empty">No messages from the Contact page yet.</div>';
+  return h + list.map(x => '<article class="card stack' + (x.status === "done" ? " muted-card" : "") + '"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(x.name) + "</strong> " + (x.status === "done" ? '<span class="pill completed">Answered</span>' : '<span class="pill requested">New</span>') + '<div class="small muted">' + esc(x.email) + (x.phone ? " · " + esc(x.phone) : "") + " · " + esc(x.at ? fmtDate(x.at.slice(0, 10), { day: "numeric", month: "short" }) + " " + x.at.slice(11, 16) : "") + '</div></div></div><p style="white-space:pre-wrap;margin:0">' + esc(x.message) + '</p><div class="row acts"><a class="btn sm primary" href="mailto:' + esc(x.email) + "?subject=" + encodeURIComponent("Your message to " + C().businessName) + '">Reply by email</a>' + (x.phone ? '<a class="btn sm" href="tel:' + esc(String(x.phone).replace(/[^+0-9]/g, "")) + '">Call</a>' : "") + '<button class="btn sm" data-act="enq-done" data-id="' + esc(x.id) + '">' + (x.status === "done" ? "Mark as new" : "Mark answered") + '</button><button class="btn sm ghost danger" data-act="enq-del" data-id="' + esc(x.id) + '">Delete</button></div></article>').join("");
 }
 function viewAbout() {
   const c = C(); const ph = (src, alt) => '<figure class="about-photo"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></figure>';
@@ -1930,8 +1962,8 @@ function petCard(p, t, admin) {
 
 // ----- admin -----
 const GROUPS = [["today", "Today", ["today"]], ["diary", "Diary", ["schedule", "bookings", "kennel", "approvals"]], ["customers", "Customers", ["clients"]], ["money", "Money", ["billing"]], ["messages", "Messages", ["messages"]]];
-const SUB_LABEL = { schedule: "Calendar", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
-function groupOf(tab) { for (const g of GROUPS) if (g[2].includes(tab)) return g[0]; return tab === "settings" ? "settings" : "today"; }
+const SUB_LABEL = { enquiries: "Contact form", schedule: "Calendar", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
+function groupOf(tab) { if (tab === "enquiries") return "messages"; for (const g of GROUPS) if (g[2].includes(tab)) return g[0]; return tab === "settings" ? "settings" : "today"; }
 const ADM_IC = (d) => '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
 const GROUP_IC = {
   today: ADM_IC('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
@@ -1944,7 +1976,12 @@ const GROUP_IC = {
 };
 const IC_OUT = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>';
 const IC_GEAR = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.7 1.7 0 0 0 .3 1.8l.1.1a2 2 0 1 1-2.8 2.8l-.1-.1a1.7 1.7 0 0 0-1.8-.3 1.7 1.7 0 0 0-1 1.5V21a2 2 0 1 1-4 0v-.1a1.7 1.7 0 0 0-1.1-1.5 1.7 1.7 0 0 0-1.8.3l-.1.1a2 2 0 1 1-2.8-2.8l.1-.1a1.7 1.7 0 0 0 .3-1.8 1.7 1.7 0 0 0-1.5-1H3a2 2 0 1 1 0-4h.1a1.7 1.7 0 0 0 1.5-1.1 1.7 1.7 0 0 0-.3-1.8l-.1-.1a2 2 0 1 1 2.8-2.8l.1.1a1.7 1.7 0 0 0 1.8.3H9a1.7 1.7 0 0 0 1-1.5V3a2 2 0 1 1 4 0v.1a1.7 1.7 0 0 0 1 1.5 1.7 1.7 0 0 0 1.8-.3l.1-.1a2 2 0 1 1 2.8 2.8l-.1.1a1.7 1.7 0 0 0-.3 1.8V9a1.7 1.7 0 0 0 1.5 1H21a2 2 0 1 1 0 4h-.1a1.7 1.7 0 0 0-1.5 1z"/></svg>';
+function adminGroups() {
+  const owner = isOwner();
+  return GROUPS.filter(g => owner || g[0] !== "money").map(g => g[0] === "messages" && owner ? [g[0], g[1], ["messages", "enquiries"]] : g);
+}
 function viewAdmin() {
+  if (!isOwner() && ["billing", "settings", "enquiries"].includes(S.adminTab)) S.adminTab = "today";
   const tab = S.adminTab; const g = groupOf(tab); const quiet = isQuiet(); const need = needsYou();
   let body = "";
   if (tab === "today") body = adminToday();
@@ -1955,11 +1992,12 @@ function viewAdmin() {
   else if (tab === "clients") body = adminClients();
   else if (tab === "billing") body = adminBilling();
   else if (tab === "messages") body = adminMessages();
+  else if (tab === "enquiries") body = adminEnquiries();
   else body = adminSettings();
-  const grp = GROUPS.find(x => x[0] === g);
-  const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "messages" ? unreadForTeam() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
-  const side = GROUPS.map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && unreadForTeam() && !quiet ? '<span class="cnt-side num" title="Unread messages">' + unreadForTeam() + "</span>" : "") + "</button>").join("") + '<button class="gear side-extra" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
-  const moreSheet = S.moreOpen ? '<div class="more-back" data-act="admin-more"></div><div class="more-sheet" role="menu"><button role="menuitem" data-act="tab" data-id="settings">' + IC_GEAR + "<span>Settings</span></button><button role=\"menuitem\" data-act=\"admin-site\">" + GROUP_IC.site + '<span>View site</span></button><button role="menuitem" class="danger" data-act="staff-signout">' + IC_OUT + "<span>Sign out</span></button></div>" : "";
+  const grp = adminGroups().find(x => x[0] === g);
+  const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "messages" ? unreadForTeam() : k === "enquiries" ? newEnquiries() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
+  const side = adminGroups().map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && (unreadForTeam() + newEnquiries()) && !quiet ? '<span class="cnt-side num" title="Unread messages">' + (unreadForTeam() + newEnquiries()) + "</span>" : "") + "</button>").join("") + (isOwner() ? '<button class="gear side-extra" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" : "") + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
+  const moreSheet = S.moreOpen ? '<div class="more-back" data-act="admin-more"></div><div class="more-sheet" role="menu">' + (isOwner() ? '<button role="menuitem" data-act="tab" data-id="settings">' + IC_GEAR + "<span>Settings</span></button>" : "") + "<button role=\"menuitem\" data-act=\"admin-site\">" + GROUP_IC.site + '<span>View site</span></button><button role="menuitem" class="danger" data-act="staff-signout">' + IC_OUT + "<span>Sign out</span></button></div>" : "";
   const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
   return '<div class="wrap"><div class="admin"><nav class="side" aria-label="Back office">' + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
 }
@@ -2000,8 +2038,8 @@ function adminToday() {
   const alerts = []; const seen = new Set();
   live.filter(b => b.date <= addDays(t, 7)).forEach(b => { const s0 = svcById(b.serviceId); if (!s0 || !s0.vax) return; (b.petIds || []).forEach(pid => { const p = pet(pid); if (!p || seen.has(pid)) return; const vs = vaxState(p, b.cat === "boarding" ? b.endDate : b.date); if (vs.worst === "expired" || vs.worst === "missing") { seen.add(pid); alerts.push({ p, vs, b }); } }); });
   const greet = nowM < 720 ? "Good morning" : nowM < 1050 ? "Good afternoon" : "Good evening";
-  let h = '<div class="head"><div><h2>' + greet + '</h2><p class="muted">' + esc(fmtDate(t, { weekday: "long", day: "numeric", month: "long" })) + " · " + hhmm(nowM) + (isQuiet() ? " · Quiet hours" : "") + '</p></div><div class="row"><button class="btn" data-act="nums">' + (S.showNums ? "Hide numbers" : "Show numbers") + '</button><button class="btn primary" data-act="new-booking">New booking</button></div></div>';
-  if (S.showNums) {
+  let h = '<div class="head"><div><h2>' + greet + '</h2><p class="muted">' + esc(fmtDate(t, { weekday: "long", day: "numeric", month: "long" })) + " · " + hhmm(nowM) + (isQuiet() ? " · Quiet hours" : "") + '</p></div><div class="row">' + (isOwner() ? '<button class="btn" data-act="nums">' + (S.showNums ? "Hide numbers" : "Show numbers") + "</button>" : "") + '<button class="btn primary" data-act="new-booking">New booking</button></div></div>';
+  if (S.showNums && isOwner()) {
     const visitsAll = S.bookings.filter(b => b.cat !== "boarding" && b.date === t && ["confirmed", "in_progress", "completed"].includes(b.status));
     const boardingTonight = live.filter(b => occupiesNight(b, t)).reduce((s0, b) => s0 + (b.petIds || []).length, 0);
     const daycareToday = live.filter(b => b.cat === "daycare" && b.date === t).reduce((s0, b) => s0 + (b.petIds || []).length, 0);
@@ -2262,7 +2300,7 @@ function adminSettings() {
   h += '<div class="subnav" role="tablist" aria-label="Settings sections">' + SET_SECS.map(([k, l]) => '<button type="button" role="tab" data-act="settab" data-id="' + k + '"' + (sec === k ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + ">" + l + "</button>").join("") + "</div>";
   if (S.fb && S.authUser) { const hasPw = (S.authUser.providerData || []).some(x => x.providerId === "password");
     h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
-  if (S.fb) h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => '<li class="li"><span>' + esc(em) + (S.authUser && String(S.authUser.email).toLowerCase() === em ? ' <span class="muted small">(you)</span>' : "") + "</span>" + (S.authUser && String(S.authUser.email).toLowerCase() === em ? "" : '<button type="button" class="btn sm" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button>') + "</li>").join("") + '</ul><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><button class="btn" type="submit">Add</button></form></section>';
+  if (S.fb) h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => { const me = S.authUser && String(S.authUser.email).toLowerCase() === em; const r = roleOf(S.team, em); return '<li class="li"><span>' + esc(em) + (me ? ' <span class="muted small">(you)</span>' : "") + ' <span class="pill ' + (r === "admin" ? "confirmed" : "requested") + '">' + (r === "admin" ? "Admin" : "Staff") + "</span></span>" + (me ? "" : '<span class="row"><button type="button" class="btn sm" data-act="admin-role" data-id="' + esc(em) + '">' + (r === "admin" ? "Make staff" : "Make admin") + '</button><button type="button" class="btn sm ghost danger" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button></span>') + "</li>"; }).join("") + '</ul><p class="small muted"><strong>Admin</strong> sees everything, including Money, Settings and the Contact form. <strong>Staff</strong> see the day-to-day work only: Today, Diary, Customers and Messages.</p><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><label class="sr-only" for="ad-role">Role</label><select id="ad-role" name="role" style="width:auto"><option value="staff">Staff</option><option value="admin">Admin</option></select><button class="btn" type="submit">Add</button></form></section>';
   h += integrationsCards(sec);
   h += '<form class="stack" data-form="settings">';
   if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
@@ -2377,7 +2415,11 @@ async function handleClick(e) {
     }
     case "go-back": if (S.navCount > 1) history.back(); else navTo("home"); break;
     case "go-auth": S.afterAuth = "book"; S.portalTab = id; S.portalErr = ""; navTo("portal"); break;
-    case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
+    case "admin-role": { const t = S.team || {}; const next = roleOf(t, id) === "admin" ? "staff" : "admin"; try { await db.doc("config/admins").set(Object.assign({}, t, { roles: Object.assign({}, t.roles || {}, { [id]: next }) })); toast(id + " is now " + (next === "admin" ? "an admin" : "staff")); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
+    case "enq-done": { const x = (S.enquiries || []).find(q => q.id === id); if (x) await put("enquiries", Object.assign({}, x, { status: x.status === "done" ? "new" : "done" })); break; }
+    case "enq-del": { if (!confirm("Delete this message?")) break; await del("enquiries", id); toast("Deleted"); break; }
+    case "contact-again": S.contactSent = ""; render(); break;
+    case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); const roles = Object.assign({}, t.roles || {}); delete roles[id]; try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids, roles })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "staff-signout": S.moreOpen = false; ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
@@ -2536,11 +2578,22 @@ async function handleSubmit(e) {
     } catch (err) { toast(err && err.code === "auth/requires-recent-login" ? "For safety, sign out and sign in again, then set the password." : authErr(err)); }
     return;
   }
+  if (kind === "contact") {
+    if (String(fd.get("website") || "")) { S.contactSent = "there"; render(); return; }
+    const name = String(fd.get("name") || "").trim().slice(0, 80), email = String(fd.get("email") || "").trim().toLowerCase().slice(0, 120), phone = String(fd.get("phone") || "").trim().slice(0, 30), message = String(fd.get("message") || "").trim().slice(0, 2000);
+    S.contactErr = !name ? "Add your name." : !/^\S+@\S+\.\S+$/.test(email) ? "Add an email address we can reply to." : message.length < 5 ? "Add a short message." : "";
+    if (S.contactErr) { render(); return; }
+    const id = "enq-" + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+    try { if (S.mode === "live") await db.collection("enquiries").doc(id).set({ name, email, phone, message, at: new Date().toISOString(), status: "new" }); else { S.enquiries.push({ id, name, email, phone, message, at: new Date().toISOString(), status: "new" }); } }
+    catch (er) { S.contactErr = "Couldn't send your message. Check your connection and try again, or call us."; render(); return; }
+    S.contactSent = name.split(" ")[0]; S.contactErr = ""; forget(e.target); render(); return;
+  }
   if (kind === "admin-add") {
     const em = String(fd.get("email") || "").trim().toLowerCase();
     if (!/^\S+@\S+\.\S+$/.test(em)) { toast("Add a valid email address."); return; }
+    const role = fd.get("role") === "admin" ? "admin" : "staff";
     const t = S.team || {}; const list = Array.from(new Set((t.emails || []).concat(em)));
-    try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list })); forget(e.target); toast("Added " + em + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
+    try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, roles: Object.assign({}, t.roles || {}, { [em]: role }) })); forget(e.target); toast("Added " + em + " as " + (role === "admin" ? "an admin" : "staff") + ". They can sign in to the back office now."); } catch (e) { toast("Couldn't save. Check your connection."); }
     return;
   }
   if (kind === "signin") {

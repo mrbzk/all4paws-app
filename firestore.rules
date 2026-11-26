@@ -1,7 +1,8 @@
 rules_version = '2';
 
 // ALL4PAWS security rules.
-// Staff: anyone whose verified email is listed in config/admins. Staff can read and change everything.
+// Team: anyone whose verified email is listed in config/admins. Each has a role in config/admins.roles:
+//   admin (the default): everything. staff: day-to-day work only, no settings, team list, payments or contact form.
 // Customers: signed in, and linked to one record in /clients through its uid field. They can only read and write
 // their own record, dogs, bookings and messages, within the limits below.
 // Everyone: can read the business settings (services, prices, opening rules) and /busy, which holds each booking's
@@ -24,6 +25,11 @@ service cloud.firestore {
         && (request.auth.uid in teamDoc().get('staffUids', {}).keys()
             || (verified() && myEmail() in teamDoc().emails));
     }
+    // The team member's email as the team list knows it, and whether they are an admin (the default role)
+    function teamEmail() {
+      return request.auth.uid in teamDoc().get('staffUids', {}).keys() ? teamDoc().staffUids[request.auth.uid] : myEmail();
+    }
+    function isOwner() { return isAdmin() && teamDoc().get('roles', {}).get(teamEmail(), 'admin') == 'admin'; }
     // The signed-in person owns the customer record with this id
     function ownsClient(cid) {
       return signedIn() && cid is string
@@ -33,13 +39,29 @@ service cloud.firestore {
 
     match /config/main {
       allow read: if true;
-      allow write: if isAdmin();
+      allow write: if isOwner();
     }
 
     match /config/admins {
       allow read: if signedIn() && (request.auth.uid in resource.data.get('staffUids', {}).keys()
         || (verified() && myEmail() in resource.data.emails));
-      allow write: if isAdmin();
+      allow write: if isOwner();
+      // A listed team member records their own account the first time they sign in (nothing else)
+      allow update: if verified() && myEmail() in resource.data.emails
+        && changes().hasOnly(['staffUids'])
+        && request.resource.data.staffUids.diff(resource.data.get('staffUids', {})).affectedKeys().hasOnly([request.auth.uid])
+        && request.resource.data.staffUids[request.auth.uid] == myEmail();
+    }
+
+    // Contact page: anyone can send a message; only admins can read or manage them
+    match /enquiries/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['name', 'email', 'phone', 'message', 'at', 'status'])
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && request.resource.data.email is string && request.resource.data.email.size() <= 120 && request.resource.data.email.matches('.+@.+[.].+')
+        && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
+        && request.resource.data.message is string && request.resource.data.message.size() > 0 && request.resource.data.message.size() <= 2000
+        && request.resource.data.status == 'new';
+      allow read, update, delete: if isOwner();
     }
 
     match /busy/{id} {
@@ -127,8 +149,8 @@ service cloud.firestore {
     match /updates/{id} { allow read, write: if isAdmin(); }
     match /days/{id} { allow read, write: if isAdmin(); }
     // Card payments are written only by the payment server.
-    match /payments/{id} { allow read: if isAdmin(); allow write: if false; }
-    match /checkouts/{id} { allow read: if isAdmin(); allow write: if false; }
+    match /payments/{id} { allow read: if isOwner(); allow write: if false; }
+    match /checkouts/{id} { allow read: if isOwner(); allow write: if false; }
     // The connected Stripe account and sign-in states: server only.
     match /stripe/{id} { allow read, write: if false; }
 

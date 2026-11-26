@@ -30,6 +30,13 @@ async function isStaff(auth) {
   return !!(d.staffUids && d.staffUids[auth.uid]) || (confirmed && (d.emails || []).map(x => String(x).toLowerCase()).includes(email));
 }
 async function requireStaff(auth) { if (!(await isStaff(auth))) throw new HttpsError("permission-denied", "Staff only."); }
+// Admins (the default role) manage payments; staff can't connect or disconnect Stripe
+async function requireOwner(auth) {
+  await requireStaff(auth);
+  const d = (await db.doc("config/admins").get()).data() || {};
+  const em = ((d.staffUids || {})[auth.uid] || String(auth.token.email || "")).toLowerCase();
+  if ((d.roles || {})[em] === "staff") throw new HttpsError("permission-denied", "Only admins can change payment settings.");
+}
 async function mainCfg() { return (await db.doc("config/main").get()).data() || {}; }
 async function connected() { const d = await db.doc(ACCOUNT_DOC).get(); return d.exists && d.data().accountId ? d.data() : null; }
 function depositFor(price, st) {
@@ -43,7 +50,7 @@ const keyMode = () => { let k = ""; try { k = STRIPE_SECRET.value() || ""; } cat
 
 // Staff: start connecting. Returns Stripe's sign-in page to send the browser to.
 exports.stripeConnectStart = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
-  await requireStaff(req.auth);
+  await requireOwner(req.auth);
   if (!keyMode()) throw new HttpsError("failed-precondition", "The payment server has no platform key yet.");
   const cfg = await mainCfg(); const clientId = CLIENT_ID();
   if (!clientId) throw new HttpsError("failed-precondition", "The payment server is missing its Connect client ID.");
@@ -57,7 +64,7 @@ exports.stripeConnectStart = onCall({ region: REGION, secrets: [STRIPE_SECRET] }
 
 // Staff: finish connecting after Stripe sends the browser back with a code.
 exports.stripeConnectFinish = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
-  await requireStaff(req.auth);
+  await requireOwner(req.auth);
   const code = String((req.data || {}).code || ""); const state = String((req.data || {}).state || "");
   const ref = db.doc("stripe/state_" + req.auth.uid); const saved = (await ref.get()).data();
   await ref.delete().catch(() => {});
@@ -75,7 +82,7 @@ exports.stripeConnectFinish = onCall({ region: REGION, secrets: [STRIPE_SECRET] 
 
 // Staff: disconnect the Stripe account.
 exports.stripeDisconnect = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
-  await requireStaff(req.auth);
+  await requireOwner(req.auth);
   const acct = await connected(); const clientId = CLIENT_ID();
   if (acct && clientId) { try { await stripeFor().oauth.deauthorize({ client_id: clientId, stripe_user_id: acct.accountId }); } catch (e) {} }
   await db.doc(ACCOUNT_DOC).delete();
@@ -84,7 +91,7 @@ exports.stripeDisconnect = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, 
 
 // Staff: what is connected?
 exports.stripeStatus = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, async req => {
-  await requireStaff(req.auth);
+  await requireOwner(req.auth);
   const mode = keyMode();
   if (!mode) return { connected: false, server: false, reason: "The payment server has no platform key yet." };
   if (!CLIENT_ID()) return { connected: false, server: false, reason: "The payment server is missing its Connect client ID." };
