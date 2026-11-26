@@ -601,6 +601,15 @@ html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--w
 .cat.portrait{background:var(--accent)}
 .soon-pill{background:var(--accent);color:var(--accent-ink);margin-right:6px;vertical-align:2px}
 .about-copy p{font-size:1.08rem;margin:0 0 14px;max-width:56ch}
+.meet-days{display:flex;gap:8px;overflow-x:auto;padding-bottom:4px;scrollbar-width:thin}
+.mday{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;min-width:62px;padding:8px 6px;border:1px solid var(--line);border-radius:12px;background:var(--surface);flex:none}
+.mday strong{font-size:1.2rem}.mday:hover{border-color:var(--accent)}.mday:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.mday.on{background:var(--accent);border-color:var(--accent);color:#fff}
+.meet-slots{display:flex;flex-wrap:wrap;gap:8px}
+.avail{display:flex;flex-direction:column;gap:6px}
+.avail-row{display:grid;grid-template-columns:140px 140px auto 140px;gap:8px;align-items:center;justify-content:start}
+.avail-row input[type=time]{width:100%;padding:6px 8px}
+@media (max-width:640px){.avail-row{grid-template-columns:minmax(0,1fr) auto minmax(0,1fr);row-gap:4px;padding-bottom:6px;border-bottom:1px solid var(--line)}.avail-row > .opt{grid-column:1 / -1}}
 .contact-grid{display:grid;grid-template-columns:minmax(0,1.6fr) minmax(0,1fr);gap:18px;align-items:start}
 @media (max-width:760px){.contact-grid{grid-template-columns:1fr}}
 .contact-card p{margin:0}.big-link{font-size:1.1rem;font-weight:700}
@@ -652,7 +661,7 @@ footer a{color:inherit}
 <body>
 <div id="app"></div>
 <script>
-const ROUTES = ["home", "book", "messages", "portal", "admin", "about", "portraits", "contact"];
+const ROUTES = ["home", "book", "messages", "portal", "admin", "about", "portraits", "contact", "meet"];
 const USE_PATHS = !!document.querySelector('link[rel="manifest"]') && (location.protocol === "https:" || location.hostname === "localhost");
 // ===== CORE (pure logic, also used to build the seed data) =====
 const DEFAULT_CFG = {
@@ -932,7 +941,7 @@ const S = {
   canAdmin: true, me: null, adminTab: "today", modal: null, toast: "",
   bFilter: "upcoming", cQuery: "", cSel: null, draft: { repeat: 1 }, done: null, portalEmail: "", portalErr: "",
   errors: [], netNote: "", updates: [], messages: [], days: [], thread: null, cmp: null, staffId: "", assets: null,
-  lastSub: {}, enquiries: [], role: "admin", showNums: false, setTab: "business", undo: null, toastUndo: false
+  lastSub: {}, enquiries: [], meetings: [], meetBusy: [], gBusy: null, meet: {}, role: "admin", showNums: false, setTab: "business", undo: null, toastUndo: false
 };
 let db = null;
 const $app = document.getElementById("app");
@@ -993,6 +1002,7 @@ async function patchBooking(id, changes) { const b = S.bookings.find(x => x.id =
 function startDemo() {
   const s = makeSample(todayISO());
   S.mode = "demo"; S.cfg = null; S.clients = s.clients; S.pets = s.pets; S.bookings = s.bookings; S.updates = []; S.messages = s.messages; S.days = []; S.canAdmin = true; S.role = "admin";
+  S.meetings = [{ id: "mg-demo", date: addDays(todayISO(), 2), start: "11:00", end: "11:30", name: "Priya Shah", email: "priya@example.com", phone: "07700 900333", dogName: "Bramble", address: "12 Oak Road", notes: "Rescue, a bit shy with men", status: "booked", at: new Date().toISOString() }];
   S.enquiries = [{ id: "enq-demo", name: "Sophie Turner", email: "sophie@example.com", phone: "07700 900222", message: "Hi! Do you have space for a cockapoo for daycare two days a week from January?", at: new Date(Date.now() - 3 * 3600e3).toISOString(), status: "new" }];
   render();
 }
@@ -1156,7 +1166,17 @@ async function stripeConnectReturn() {
   const code = q.get("code") || "", state = q.get("state") || "", err = q.get("error_description") || q.get("error") || "";
   ["code", "state", "scope", "error", "error_description"].forEach(k => q.delete(k));
   try { history.replaceState(null, "", location.pathname + (q.toString() ? "?" + q : "") + location.hash); } catch (e) {}
-  if (err) { setTimeout(() => toast(/denied/i.test(err) ? "Stripe connection cancelled." : "Stripe said: " + err), 600); return; }
+  const isG = state.startsWith("g_");
+  if (err) { setTimeout(() => toast(/denied/i.test(err) ? (isG ? "Google Calendar connection cancelled." : "Stripe connection cancelled.") : (isG ? "Google said: " : "Stripe said: ") + err), 600); return; }
+  if (isG) {
+    try { if (FB_AUTH && FB_AUTH.auth.authStateReady) await FB_AUTH.auth.authStateReady(); } catch (e) {}
+    for (let i = 0; i < 40 && !S.canAdmin; i++) await new Promise(r => setTimeout(r, 250));
+    if (!S.canAdmin) { toast("Sign in to the back office, then click Connect Google Calendar again."); return; }
+    toast("Finishing the Google Calendar connection...");
+    try { const r = await callFn("googleConnectFinish", { code, state }); S.gStatus = r; toast("Google Calendar connected" + (r && r.email ? " (" + r.email + ")" : "") + "."); }
+    catch (e) { toast((e && e.message) || "Couldn't finish connecting Google Calendar."); S.gStatus = undefined; }
+    S.adminTab = "settings"; S.setTab = "integrations"; render(); return;
+  }
   try { if (FB_AUTH && FB_AUTH.auth.authStateReady) await FB_AUTH.auth.authStateReady(); } catch (e) {}
   for (let i = 0; i < 40 && !S.canAdmin; i++) await new Promise(r => setTimeout(r, 250));
   if (!S.canAdmin) { toast("Sign in to the back office, then click Connect with Stripe again."); return; }
@@ -1231,12 +1251,13 @@ function startAuth() {
   S.canAdmin = false; S.me = null; S.authReady = false; S.clients = []; S.pets = []; S.bookings = []; S.messages = []; S.updates = []; S.days = [];
   db.doc("config/main").onSnapshot(snap => { S.cfg = snap.exists ? snap.data() : null; render(); }, liveFail);
   db.collection("busy").onSnapshot(snap => { S.busy = rowsOf(snap); mergeBookings(); render(); }, liveFail);
+  db.collection("meetbusy").onSnapshot(snap => { S.meetBusy = rowsOf(snap); render(); }, () => {});
   FB_AUTH.M.onAuthStateChanged(FB_AUTH.auth, user => { handleAuth(user).catch(e => { console.warn("auth", e); S.authReady = true; S.portalErr = "Something went wrong signing you in. Reload the page and try again."; render(); }); });
   render();
 }
 async function handleAuth(user) {
   unsubAll();
-  Object.assign(S, { authUser: user || null, authReady: true, me: null, canAdmin: false, role: "admin", enquiries: [], needsProfile: false, needsVerify: false, clients: [], pets: [], myBookings: [], messages: [], updates: [], days: [], admins: null });
+  Object.assign(S, { authUser: user || null, authReady: true, me: null, canAdmin: false, role: "admin", enquiries: [], meetings: [], needsProfile: false, needsVerify: false, clients: [], pets: [], myBookings: [], messages: [], updates: [], days: [], admins: null });
   mergeBookings();
   if (!user) { render(); return; }
   const em = String(user.email || "").toLowerCase();
@@ -1255,7 +1276,7 @@ async function handleAuth(user) {
   if (S.canAdmin) {
     keep(db.doc("config/admins").onSnapshot(sn => { S.team = sn.exists ? sn.data() : { emails: [] }; S.admins = S.team.emails || []; S.role = roleOf(S.team, em); render(); }, liveFail));
     if (S.role !== "staff") keep(db.collection("enquiries").onSnapshot(snap => { S.enquiries = rowsOf(snap); render(); }, () => {}));
-    for (const coll of ["clients", "pets", "bookings", "updates", "messages", "days"]) keep(db.collection(coll).onSnapshot(snap => { const rows = rowsOf(snap); if (coll === "bookings") { S.myBookings = rows; mergeBookings(); } else S[coll] = rows; render(); }, liveFail));
+    for (const coll of ["clients", "pets", "bookings", "updates", "messages", "days", "meetings"]) keep(db.collection(coll).onSnapshot(snap => { const rows = rowsOf(snap); if (coll === "bookings") { S.myBookings = rows; mergeBookings(); } else S[coll] = rows; render(); }, liveFail));
     if (view() === "portal") navTo("admin");
     render(); return;
   }
@@ -1432,6 +1453,7 @@ function renderView() {
   else if (v === "home") html += viewHome();
   else if (v === "about") html += viewAbout();
   else if (v === "contact") html += viewContact();
+  else if (v === "meet") html += viewMeet();
   else if (v === "portraits") html += viewPortraits();
   else if (v === "book") html += viewBook();
   else if (v === "portal") html += viewPortal();
@@ -1615,11 +1637,11 @@ const HOME_SERVICES = [
 ];
 function viewHome() {
   const c = C();
-  return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#about">About us</a></div></div>' +
+  return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
     '<div class="gallery" role="list" aria-label="Photos of Nicole and the dogs">' + GALLERY.map(([f, alt]) => '<figure role="listitem"><img src="img/' + f + '.jpg" alt="' + esc(alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div></div></section>" +
     '<section class="block"><div class="wrap"><h2>Services</h2><ul class="svc-list">' + HOME_SERVICES.map(([cat, name, line]) => '<li><span class="cat ' + cat + '" aria-hidden="true"></span><div><h3>' + name + '</h3><p class="muted">' + line + "</p></div></li>").join("") +
     '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Bespoke, hyperrealistic watercolour portraits of your dog by award-winning artist Adrian Smart. A timeless keepsake, or a gift to treasure.</p><p style="margin:8px 0 0"><a href="#portraits">See his work</a></p></div></li></ul>' +
-    '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a></div></div></section>' +
+    '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div></section>' +
     '<section class="block"><div class="wrap"><h2>How booking works</h2><ol class="steps"><li><h4>Request online</h4><p class="muted small">Pick a service, dates and your dogs.</p></li><li><h4>We confirm</h4><p class="muted small">New customers start with a free meet and greet.</p></li><li><h4>Updates after every visit</h4><p class="muted small">Photos and notes in your account.</p></li></ol></div></section>' +
     '<section class="block"><div class="wrap"><h2>Before a stay</h2><p class="muted">Daycare and overnight stays need up-to-date vaccinations. Add the dates when you book and we\'ll remind you before they lapse.</p><div class="policy"><div class="card"><h4>Vaccinations we check</h4><p class="muted small" style="margin-top:6px">Rabies, DHPP (distemper, hepatitis, parvovirus, parainfluenza) and kennel cough (Bordetella). Kennel cough must be at least 7 days old before boarding.</p></div><div class="card"><h4>Cancellations</h4><p class="muted small" style="margin-top:6px">Walks and grooming: free to cancel until 24 hours before. Boarding: free until 7 days before, then the first night is charged.</p></div></div></div></section>';
 }
@@ -1639,6 +1661,129 @@ function viewPortraits() {
     "<p>Whether you're looking to commission a portrait of your own dog, create a meaningful birthday or anniversary gift, or preserve the memory of a much-loved companion, these bespoke artworks offer a timeless keepsake to treasure for years to come.</p>" +
     "<p>I'm so pleased to be able to offer access to such beautiful, individually crafted artwork and look forward to sharing more with you soon.</p>" +
     '<p class="muted">Nicole</p><div class="row">' + cta + "</div></div></div></section>";
+}
+const MEET_DEFAULT = { enabled: true, duration: 30, buffer: 15, notice: 24, ahead: 28, location: "At your home", days: { 0: { on: false, from: "10:00", to: "16:00" }, 1: { on: true, from: "10:00", to: "16:00" }, 2: { on: true, from: "10:00", to: "16:00" }, 3: { on: true, from: "10:00", to: "16:00" }, 4: { on: true, from: "10:00", to: "16:00" }, 5: { on: true, from: "10:00", to: "16:00" }, 6: { on: false, from: "10:00", to: "16:00" } } };
+const WEEKDAYS = ["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"];
+function meetCfg() { const m = Object.assign({}, MEET_DEFAULT, (S.cfg && S.cfg.meet) || {}); m.days = Object.assign({}, MEET_DEFAULT.days, m.days || {}); return m; }
+function toMins(t) { const x = /^(\d{1,2}):(\d{2})$/.exec(String(t || "")); return x ? Number(x[1]) * 60 + Number(x[2]) : 0; }
+// Busy times on a date in minutes: booked meet & greets plus Google Calendar (when connected)
+function meetBusyOn(d) {
+  const own = (S.canAdmin ? (S.meetings || []).filter(m => m.status === "booked").map(m => ({ date: m.date, start: m.start, end: m.end })) : []).concat(S.meetBusy || []);
+  const seen = new Set(); const out = [];
+  own.forEach(m => { const k = m.date + m.start; if (m.date === d && !seen.has(k)) { seen.add(k); out.push({ s: toMins(m.start), e: toMins(m.end) }); } });
+  (S.gBusy || []).forEach(b => { if (b.date === d) out.push({ s: b.s, e: b.e }); });
+  return out;
+}
+function meetSlots(d) {
+  const m = meetCfg(); const day = m.days[parse(d).getDay()];
+  if (!m.enabled || !day || !day.on || (C().daysOff || []).includes(d)) return [];
+  const from = toMins(day.from), to = toMins(day.to), dur = Math.max(10, Number(m.duration) || 30), buf = Math.max(0, Number(m.buffer) || 0);
+  const step = dur <= 15 ? 15 : 30; const busy = meetBusyOn(d);
+  const earliest = Date.now() + (Number(m.notice) || 0) * 3600e3; const out = [];
+  for (let t = from; t + dur <= to; t += step) {
+    if (new Date(d + "T" + hhmm(t) + ":00").getTime() < earliest) continue;
+    if (busy.some(b => t < b.e + buf && t + dur > b.s - buf)) continue;
+    out.push(t);
+  }
+  return out;
+}
+function meetDays() { const m = meetCfg(); const t = todayISO(); const out = []; for (let i = 0; i <= (Number(m.ahead) || 28); i++) { const d = addDays(t, i); if (meetSlots(d).length) out.push(d); } return out; }
+function londonParts(isoStr) {
+  const f = new Intl.DateTimeFormat("en-GB", { timeZone: "Europe/London", year: "numeric", month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit", hourCycle: "h23" });
+  const p = Object.fromEntries(f.formatToParts(new Date(isoStr)).map(x => [x.type, x.value]));
+  return { date: p.year + "-" + p.month + "-" + p.day, m: Number(p.hour) * 60 + Number(p.minute) };
+}
+async function loadGoogleBusy() {
+  if (S.gBusy !== null || !S.fb || S.gLoading) return; S.gLoading = true;
+  try {
+    const t = todayISO(); const r = await callFn("meetBusy", { from: t, to: addDays(t, (Number(meetCfg().ahead) || 28) + 1) });
+    const out = [];
+    (r && r.busy || []).forEach(b => { const a = londonParts(b.start), z = londonParts(b.end); if (a.date === z.date) out.push({ date: a.date, s: a.m, e: z.m }); else { out.push({ date: a.date, s: a.m, e: 24 * 60 }); for (let d = addDays(a.date, 1); d < z.date; d = addDays(d, 1)) out.push({ date: d, s: 0, e: 24 * 60 }); out.push({ date: z.date, s: 0, e: z.m }); } });
+    S.gBusy = out;
+  } catch (e) { S.gBusy = []; }
+  S.gLoading = false; render();
+}
+function icsFor(m) {
+  const st = m.date.replace(/-/g, "") + "T" + m.start.replace(":", "") + "00", en = m.date.replace(/-/g, "") + "T" + m.end.replace(":", "") + "00";
+  const esc2 = x => String(x || "").replace(/([,;\\])/g, "\\$1").replace(/\n/g, "\\n");
+  return ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//ALL4PAWS//Meet and Greet//EN", "BEGIN:VEVENT", "UID:" + m.id + "@all4paws", "DTSTAMP:" + new Date().toISOString().replace(/[-:]/g, "").slice(0, 15) + "Z", "DTSTART;TZID=Europe/London:" + st, "DTEND;TZID=Europe/London:" + en, "SUMMARY:" + esc2("Meet & Greet with " + C().businessName), "LOCATION:" + esc2(m.address || meetCfg().location || ""), "DESCRIPTION:" + esc2("Dog: " + (m.dogName || "") + (m.notes ? "\n" + m.notes : "")), "END:VEVENT", "END:VCALENDAR"].join("\r\n");
+}
+function viewMeet() {
+  const c = C(); const m = meetCfg(); const st = S.meet || {};
+  const head = '<section class="hero about-hero"><div class="wrap"><div><button type="button" class="backlink" data-act="go-back"><span aria-hidden="true">←</span> Back</button><p class="eyebrow">Meet &amp; Greet</p><h1 class="quote">Come and say hello</h1><div class="about-copy"><p>Before your dog\'s first walk or stay, we meet you and your dog for about ' + esc(m.duration) + ' minutes, ' + esc(String(m.location || "at your home").toLowerCase()) + '. It\'s free, and there\'s no commitment.</p></div></div></div></section>';
+  let body;
+  if (st.done) {
+    const d = st.done;
+    body = '<div class="card stack"><span class="pill confirmed" style="align-self:flex-start">Booked</span><h2>See you ' + esc(fmtDate(d.date, { weekday: "long", day: "numeric", month: "long" }).replace(/ /g, " ")) + " at " + esc(d.start) + '</h2><p>Thanks, ' + esc(String(d.name).split(" ")[0]) + '. We\'ll meet ' + esc(d.dogName || "your dog") + " at " + esc(d.address || m.location) + '. If you need to change the time, <a href="#contact">get in touch</a>.</p><div class="row"><button class="btn" data-act="meet-ics">Add to my calendar</button><a class="btn primary" href="#book">Book a service</a></div></div>';
+  } else if (!m.enabled) {
+    body = '<div class="card stack"><h3>Meet &amp; Greets aren\'t open for online booking right now</h3><p><a href="#contact">Send us a message</a> and we\'ll arrange a time.</p></div>';
+  } else if (S.fb && S.gBusy === null) {
+    setTimeout(loadGoogleBusy, 0); body = '<div class="card"><p class="muted">Checking availability...</p></div>';
+  } else {
+    const days = meetDays();
+    if (!days.length) body = '<div class="card stack"><h3>No times free right now</h3><p><a href="#contact">Send us a message</a> and we\'ll find a time.</p></div>';
+    else {
+      const day = days.includes(st.day) ? st.day : days[0]; const slots = meetSlots(day); const slot = slots.includes(st.slot) ? st.slot : null; S.meet = Object.assign({}, st, { day, slot });
+      body = '<div class="card stack"><h3>1. Pick a day</h3><div class="meet-days" role="group" aria-label="Days">' + days.slice(0, 21).map(d => '<button type="button" class="mday' + (d === day ? " on" : "") + '" data-act="meet-day" data-id="' + d + '" aria-pressed="' + (d === day) + '"><span class="small">' + esc(fmtDate(d, { weekday: "short" })) + "</span><strong>" + parse(d).getDate() + '</strong><span class="small">' + esc(fmtDate(d, { month: "short" })) + "</span></button>").join("") + "</div>" +
+        '<h3>2. Pick a time</h3><div class="meet-slots" role="group" aria-label="Times">' + slots.map(t => '<button type="button" class="btn sm' + (t === slot ? " primary" : "") + '" data-act="meet-slot" data-id="' + t + '" aria-pressed="' + (t === slot) + '">' + hhmm(t) + "</button>").join("") + "</div></div>";
+      if (slot !== null) {
+        const me = S.me ? client(S.me) : null; const pet = me ? petsOf(me.id)[0] : null;
+        body += '<form class="card stack" data-form="meet-book" novalidate><h3>3. Your details</h3><p class="small muted">' + esc(fmtDate(day, { weekday: "long", day: "numeric", month: "long" }).replace(/ /g, " ")) + " at " + hhmm(slot) + " for " + esc(m.duration) + ' minutes</p><div class="grid2">' +
+          '<div class="field"><label for="mg-name">Your name</label><input type="text" id="mg-name" name="name" autocomplete="name" required maxlength="80" value="' + esc(me ? me.name || "" : "") + '"></div>' +
+          '<div class="field"><label for="mg-dog">Dog\'s name</label><input type="text" id="mg-dog" name="dogName" required maxlength="60" value="' + esc(pet ? pet.name : "") + '"></div>' +
+          '<div class="field"><label for="mg-email">Email</label><input type="email" id="mg-email" name="email" autocomplete="email" required maxlength="120" value="' + esc(me ? me.email || "" : "") + '"></div>' +
+          '<div class="field"><label for="mg-phone">Mobile</label><input type="tel" id="mg-phone" name="phone" autocomplete="tel" required maxlength="30" value="' + esc(me ? me.phone || "" : "") + '"></div></div>' +
+          '<div class="field"><label for="mg-addr">Address for the visit</label><input type="text" id="mg-addr" name="address" autocomplete="street-address" required maxlength="160" value="' + esc(me ? me.address || "" : "") + '"></div>' +
+          '<div class="field"><label for="mg-notes">Anything we should know? <span class="muted small">(optional)</span></label><textarea id="mg-notes" name="notes" rows="3" maxlength="1000" placeholder="Breed, age, and the services you\'re interested in"></textarea></div>' +
+          '<div class="hp" aria-hidden="true"><label for="mg-web">Leave this empty</label><input type="text" id="mg-web" name="website" tabindex="-1" autocomplete="off"></div>' +
+          (st.err ? '<p class="err" role="alert">' + esc(st.err) + "</p>" : "") + '<div class="row"><button class="btn primary" type="submit">Book Meet &amp; Greet</button></div></form>';
+      }
+    }
+  }
+  return head + '<section class="block" style="padding-top:0"><div class="wrap" style="max-width:760px">' + body + "</div></section>";
+}
+function adminMeets() {
+  const t = todayISO(); const all = (S.meetings || []).slice().sort((a, b) => (a.date + a.start).localeCompare(b.date + b.start));
+  const up = all.filter(m => m.status === "booked" && m.date >= t), past = all.filter(m => !(m.status === "booked" && m.date >= t)).reverse().slice(0, 20);
+  const card = m => '<article class="card stack' + (m.status === "cancelled" ? " muted-card" : "") + '"><div class="row" style="justify-content:space-between;align-items:flex-start"><div><strong>' + esc(fmtDate(m.date, { weekday: "short", day: "numeric", month: "short" })) + " · " + esc(m.start) + "–" + esc(m.end) + '</strong> <span class="pill ' + (m.status === "booked" ? "confirmed" : m.status === "done" ? "completed" : "declined") + '">' + (m.status === "booked" ? "Booked" : m.status === "done" ? "Done" : "Cancelled") + "</span>" + (m.eventId ? ' <span class="pill completed">In Google Calendar</span>' : "") + '<div><strong>' + esc(m.name) + "</strong> with " + esc(m.dogName || "their dog") + '</div><div class="small muted">' + esc(m.address || "") + " · " + esc(m.phone || "") + " · " + esc(m.email || "") + "</div>" + (m.notes ? '<div class="small" style="white-space:pre-wrap">' + esc(m.notes) + "</div>" : "") + "</div></div>" +
+    (m.status === "booked" ? '<div class="row acts"><a class="btn sm" href="tel:' + esc(String(m.phone || "").replace(/[^+0-9]/g, "")) + '">Call</a><a class="btn sm" href="mailto:' + esc(m.email) + '">Email</a><button class="btn sm" data-act="meet-ics-admin" data-id="' + esc(m.id) + '">Add to calendar</button><button class="btn sm primary" data-act="meet-done" data-id="' + esc(m.id) + '">Mark done</button><button class="btn sm ghost danger" data-act="meet-cancel" data-id="' + esc(m.id) + '">Cancel</button></div>' : "") + "</article>";
+  let h = '<div class="head"><div><h2>Meet &amp; Greets</h2><p class="muted">Booked from the website. ' + (up.length ? up.length + " coming up." : "None coming up.") + (isOwner() ? ' Set your available times in Settings, Meet &amp; Greets.' : "") + "</p></div></div>";
+  h += up.length ? up.map(card).join("") : '<div class="empty">No Meet &amp; Greets booked yet.</div>';
+  if (past.length) h += '<h3 style="margin-top:10px">Earlier and cancelled</h3>' + past.map(card).join("");
+  return h;
+}
+function meetTodayCard() {
+  const t = todayISO(); const list = (S.meetings || []).filter(m => m.status === "booked" && m.date === t).sort((a, b) => a.start.localeCompare(b.start));
+  if (!list.length) return "";
+  return '<div class="card stack"><h3>Meet &amp; Greets today</h3>' + list.map(m => '<div class="row" style="justify-content:space-between"><span><strong>' + esc(m.start) + "</strong> " + esc(m.name) + " with " + esc(m.dogName || "their dog") + ' <span class="small muted">· ' + esc(m.address || "") + '</span></span><button class="btn sm" data-act="tab" data-id="meets">Open</button></div>').join("") + "</div>";
+}
+function meetSettingsCard(sec) {
+  const m = meetCfg(); const hid = sec === "meet" ? "" : " hidden"; const gs = S.gStatus;
+  const order = [1, 2, 3, 4, 5, 6, 0];
+  return '<section class="card stack" data-sec="meet"' + hid + '><div><h3>Meet &amp; Greets</h3><p class="small muted">When new customers can book a free Meet &amp; Greet from the website. ' + (gs && gs.connected ? "Google Calendar is connected, so busy times there are blocked too and new bookings are added to it." : "Connect Google Calendar in Integrations to block your busy times automatically.") + '</p></div>' +
+    '<form class="stack" data-form="meet-settings"><label class="opt"><input type="checkbox" name="enabled"' + (m.enabled ? " checked" : "") + '><span><strong>Take Meet &amp; Greet bookings online</strong></span></label>' +
+    '<div class="avail">' + order.map(w => { const d = m.days[w]; return '<div class="avail-row"><label class="opt" style="margin:0"><input type="checkbox" name="d' + w + '_on"' + (d.on ? " checked" : "") + '><span>' + WEEKDAYS[w] + '</span></label><label class="sr-only" for="mf-' + w + '">' + WEEKDAYS[w] + ' from</label><input type="time" id="mf-' + w + '" name="d' + w + '_from" value="' + esc(d.from) + '" step="900"><span class="small muted">to</span><label class="sr-only" for="mt-' + w + '">' + WEEKDAYS[w] + ' to</label><input type="time" id="mt-' + w + '" name="d' + w + '_to" value="' + esc(d.to) + '" step="900"></div>'; }).join("") + "</div>" +
+    '<div class="grid2"><div class="field"><label for="mg-dur">Length (minutes)</label><input type="number" id="mg-dur" name="duration" min="10" max="180" step="5" value="' + esc(m.duration) + '"></div><div class="field"><label for="mg-buf">Gap between bookings (minutes)</label><input type="number" id="mg-buf" name="buffer" min="0" max="120" step="5" value="' + esc(m.buffer) + '"><span class="hint">Travel time. Also kept clear around Google Calendar events.</span></div>' +
+    '<div class="field"><label for="mg-not">Minimum notice (hours)</label><input type="number" id="mg-not" name="notice" min="0" max="336" value="' + esc(m.notice) + '"></div><div class="field"><label for="mg-ahd">Bookable up to (days ahead)</label><input type="number" id="mg-ahd" name="ahead" min="1" max="90" value="' + esc(m.ahead) + '"></div></div>' +
+    '<div class="field"><label for="mg-loc">Where it happens</label><input type="text" id="mg-loc" name="location" maxlength="80" value="' + esc(m.location) + '"><span class="hint">Shown to customers, for example "At your home".</span></div>' +
+    '<p class="small muted">Days off in Days and limits are blocked too.</p><div class="row"><button class="btn primary" type="submit">Save Meet &amp; Greet times</button><a class="btn ghost" href="#meet">See the booking page</a></div></form></section>';
+}
+function googleCard(sec) {
+  const hid = sec === "integrations" ? "" : " hidden"; const gs = S.gStatus;
+  if (S.fb && S.canAdmin && sec === "integrations" && gs === undefined && !S.gStatusLoading) setTimeout(loadGoogleStatus, 0);
+  let conn;
+  if (!S.fb) conn = '<p class="small muted">Google Calendar connects on the live site.</p>';
+  else if (gs === undefined || S.gStatusLoading) conn = '<p class="small muted">Checking Google Calendar...</p>';
+  else if (gs.connected) conn = '<div class="row" style="justify-content:space-between;align-items:center"><p class="small"><strong>Connected to ' + esc(gs.email || "your Google Calendar") + '.</strong> Busy times block Meet &amp; Greet slots, and new bookings are added to this calendar.</p><button class="btn sm ghost danger" type="button" data-act="g-disconnect">Disconnect</button></div>';
+  else if (gs.server === false || gs.err) conn = '<p class="small muted">' + esc(gs.reason || "The calendar server isn't set up yet.") + " Meet &amp; Greets still work using the times you set.</p>";
+  else conn = '<div class="row"><button class="btn primary" type="button" data-act="g-connect">Connect Google Calendar</button></div><p class="small muted">Sign in with Google and click Allow. Only free and busy times are read, and Meet &amp; Greets are added as events.</p>';
+  return '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Google Calendar</h3><p class="small muted">Keep Meet &amp; Greets in step with your diary. Without it, customers pick from the times you set in Meet &amp; Greets.</p></div><span class="pill ' + (gs && gs.connected ? "ok" : "requested") + '">' + (gs && gs.connected ? "Connected" : "Not connected") + "</span></div>" + conn + "</section>";
+}
+async function loadGoogleStatus() {
+  if (S.gStatusLoading) return; S.gStatusLoading = true;
+  try { S.gStatus = await callFn("googleStatus"); }
+  catch (e) { S.gStatus = { connected: false, err: true, reason: /not-found|internal|unavailable/i.test((e && e.code) || "") ? "The calendar server isn't set up yet." : (e && e.message) || "Couldn't reach the calendar server." }; }
+  S.gStatusLoading = false; render();
 }
 function isOwner() { return !!S.canAdmin && S.role !== "staff"; }
 function roleOf(team, em) { return ((team && team.roles) || {})[String(em || "").toLowerCase()] === "staff" ? "staff" : "admin"; }
@@ -1666,7 +1811,7 @@ function adminEnquiries() {
 function viewAbout() {
   const c = C(); const ph = (src, alt) => '<figure class="about-photo"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></figure>';
   const paras = String(c.aboutText || ABOUT_DEFAULT).split(/\n\s*\n/).map(x => "<p>" + esc(x.trim()) + "</p>").join("");
-  return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">About us</p><h1 class="quote">Meet ' + esc(c.businessName) + '</h1><div class="about-copy">' + paras + '</div><div class="row"><a class="btn primary lg" href="#book">Book now</a></div></div>' +
+  return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">About us</p><h1 class="quote">Meet ' + esc(c.businessName) + '</h1><div class="about-copy">' + paras + '</div><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
     ph(c.heroPhoto || "img/nicole.jpg", "Nicole on a walk with the dogs") + '</div></section>' +
     '<section class="block"><div class="wrap"><h2>The team</h2><div class="team"><div class="card"><h3>Nicole</h3><p class="muted">Founder. Walks, daycare, overnight stays and drop-ins.</p></div><div class="card"><h3>Lauren</h3><p class="muted">Groomer. Baths, tidy-ups and full clips.</p></div></div></div></section>';
 }
@@ -1965,8 +2110,8 @@ function petCard(p, t, admin) {
 }
 
 // ----- admin -----
-const GROUPS = [["today", "Today", ["today"]], ["diary", "Diary", ["schedule", "bookings", "kennel", "approvals"]], ["customers", "Customers", ["clients"]], ["money", "Money", ["billing"]], ["messages", "Messages", ["messages"]]];
-const SUB_LABEL = { enquiries: "Contact form", schedule: "Calendar", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
+const GROUPS = [["today", "Today", ["today"]], ["diary", "Diary", ["schedule", "bookings", "kennel", "approvals", "meets"]], ["customers", "Customers", ["clients"]], ["money", "Money", ["billing"]], ["messages", "Messages", ["messages"]]];
+const SUB_LABEL = { meets: "Meet & Greets", enquiries: "Contact form", schedule: "Calendar", bookings: "Bookings", kennel: "Kennel", approvals: "To approve", clients: "Clients and dogs", messages: "Messages" };
 function groupOf(tab) { if (tab === "enquiries") return "messages"; for (const g of GROUPS) if (g[2].includes(tab)) return g[0]; return tab === "settings" ? "settings" : "today"; }
 const ADM_IC = (d) => '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' + d + "</svg>";
 const GROUP_IC = {
@@ -1988,7 +2133,8 @@ function viewAdmin() {
   if (!isOwner() && ["billing", "settings", "enquiries"].includes(S.adminTab)) S.adminTab = "today";
   const tab = S.adminTab; const g = groupOf(tab); const quiet = isQuiet(); const need = needsYou();
   let body = "";
-  if (tab === "today") body = adminToday();
+  if (tab === "today") body = adminToday() + meetTodayCard();
+  else if (tab === "meets") body = adminMeets();
   else if (tab === "approvals") body = adminApprovals();
   else if (tab === "schedule") body = adminSchedule();
   else if (tab === "bookings") body = adminBookings();
@@ -1999,7 +2145,7 @@ function viewAdmin() {
   else if (tab === "enquiries") body = adminEnquiries();
   else body = adminSettings();
   const grp = adminGroups().find(x => x[0] === g);
-  const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "messages" ? unreadForTeam() : k === "enquiries" ? newEnquiries() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
+  const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "meets" ? (S.meetings || []).filter(m => m.status === "booked" && m.date >= todayISO()).length : k === "messages" ? unreadForTeam() : k === "enquiries" ? newEnquiries() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
   const side = adminGroups().map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && (unreadForTeam() + newEnquiries()) && !quiet ? '<span class="cnt-side num" title="Unread messages">' + (unreadForTeam() + newEnquiries()) + "</span>" : "") + "</button>").join("") + (isOwner() ? '<button class="gear side-extra" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" : "") + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
   const moreSheet = S.moreOpen ? '<div class="more-back" data-act="admin-more"></div><div class="more-sheet" role="menu">' + (isOwner() ? '<button role="menuitem" data-act="tab" data-id="settings">' + IC_GEAR + "<span>Settings</span></button>" : "") + "<button role=\"menuitem\" data-act=\"admin-site\">" + GROUP_IC.site + '<span>View site</span></button><button role="menuitem" class="danger" data-act="staff-signout">' + IC_OUT + "<span>Sign out</span></button></div>" : "";
   const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
@@ -2289,7 +2435,7 @@ function adminBilling() {
       '<div class="tbl-wrap"><table class="inv resp"><thead><tr><th>Date</th><th>Description</th><th>Qty</th><th>Unit price</th><th>Amount</th><th></th></tr></thead><tbody>' + items.map(b => lineTable(b, true)).join("") + '</tbody><tfoot><tr><td></td><td colspan="3" style="text-align:right" class="tdue"><strong>Total due</strong></td><td class="num" data-label="Total due"><strong>' + money(tot) + "</strong></td><td></td></tr></tfoot></table></div></div>"; }).join("");
   return h;
 }
-const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["integrations", "Integrations"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
+const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["meet", "Meet & Greets"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["integrations", "Integrations"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
 const PER_HELP = { dog: "Per dog (2 dogs = charged twice)", dognight: "Per dog per night (2 dogs, 3 nights = 6 times)", booking: "Once per visit or stay", night: "Per night (3 nights = 3 times)" };
 function drawDaysOff() {
   const hid = document.getElementById("s-daysoff"); const box = document.getElementById("daysoff-list"); if (!hid || !box) return;
@@ -2305,7 +2451,7 @@ function adminSettings() {
   if (S.fb && S.authUser) { const hasPw = (S.authUser.providerData || []).some(x => x.providerId === "password");
     h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
   if (S.fb) h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => { const me = S.authUser && String(S.authUser.email).toLowerCase() === em; const r = roleOf(S.team, em); return '<li class="li"><span>' + esc(em) + (me ? ' <span class="muted small">(you)</span>' : "") + ' <span class="pill ' + (r === "admin" ? "confirmed" : "requested") + '">' + (r === "admin" ? "Admin" : "Staff") + "</span></span>" + (me ? "" : '<span class="row"><button type="button" class="btn sm" data-act="admin-role" data-id="' + esc(em) + '">' + (r === "admin" ? "Make staff" : "Make admin") + '</button><button type="button" class="btn sm ghost danger" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button></span>') + "</li>"; }).join("") + '</ul><p class="small muted"><strong>Admin</strong> sees everything, including Money, Settings and the Contact form. <strong>Staff</strong> see the day-to-day work only: Today, Diary, Customers and Messages.</p><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><label class="sr-only" for="ad-role">Role</label><select id="ad-role" name="role" style="width:auto"><option value="staff">Staff</option><option value="admin">Admin</option></select><button class="btn" type="submit">Add</button></form></section>';
-  h += integrationsCards(sec);
+  h += integrationsCards(sec) + googleCard(sec) + meetSettingsCard(sec);
   h += '<form class="stack" data-form="settings">';
   if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
   if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
@@ -2324,7 +2470,7 @@ function adminSettings() {
   h += part("addons", "Add-ons", "Extras customers can tick after choosing a service.",
     '<div class="row"><button class="btn sm" type="button" data-act="addon-new">New add-on</button><span class="small muted">Save first if you\'ve changed anything else.</span></div>' + aoList.map(a => '<div class="ao-row"><div class="field"><label for="ao-n-' + esc(a.id) + '">Name</label><input type="text" id="ao-n-' + esc(a.id) + '" name="ao_name_' + esc(a.id) + '" value="' + esc(a.name) + '"></div><div class="field"><label for="ao-p-' + esc(a.id) + '">Price</label><input type="number" step="0.5" min="0" id="ao-p-' + esc(a.id) + '" name="ao_price_' + esc(a.id) + '" value="' + esc(a.price) + '"></div><div class="field"><label for="ao-u-' + esc(a.id) + '">Charged</label><select id="ao-u-' + esc(a.id) + '" name="ao_per_' + esc(a.id) + '">' + Object.keys(PER_HELP).map(k => '<option value="' + k + '"' + (a.per === k ? " selected" : "") + ">" + PER_HELP[k] + "</option>").join("") + '</select></div><div class="field" style="grid-column:1/-1"><label for="ao-d-' + esc(a.id) + '">Description</label><input type="text" id="ao-d-' + esc(a.id) + '" name="ao_desc_' + esc(a.id) + '" value="' + esc(a.desc || "") + '"></div><div class="svc-checks"><span class="small muted" style="align-self:center">Offer with:</span>' + c.services.map(sv => '<label><input type="checkbox" name="ao_svc_' + esc(a.id) + '" value="' + esc(sv.id) + '"' + ((a.services || []).includes(sv.id) ? " checked" : "") + ">" + esc(sv.name) + "</label>").join("") + '</div><div class="flags"><label><input type="checkbox" name="ao_active_' + esc(a.id) + '"' + (a.active !== false ? " checked" : "") + '>Offered</label><label><input type="checkbox" name="ao_del_' + esc(a.id) + '">Delete</label></div></div>').join(""));
   h += '<section class="card stack" data-sec="comfort"' + (sec === "comfort" ? "" : " hidden") + '><div><h3>Display</h3><p class="small muted">Make the screen easier on your eyes and brain. Saved straight away, no need to press Save.</p></div>' + comfortControls() + "</section>";
-  h += '<div class="row savebar"' + (sec === "logins" || sec === "integrations" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
+  h += '<div class="row savebar"' + (sec === "logins" || sec === "integrations" || sec === "meet" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
   return h;
 }
 
@@ -2422,6 +2568,26 @@ async function handleClick(e) {
     case "admin-role": { const t = S.team || {}; const next = roleOf(t, id) === "admin" ? "staff" : "admin"; try { await db.doc("config/admins").set(Object.assign({}, t, { roles: Object.assign({}, t.roles || {}, { [id]: next }) })); toast(id + " is now " + (next === "admin" ? "an admin" : "staff")); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "enq-done": { const x = (S.enquiries || []).find(q => q.id === id); if (x) await put("enquiries", Object.assign({}, x, { status: x.status === "done" ? "new" : "done" })); break; }
     case "enq-del": { if (!confirm("Delete this message?")) break; await del("enquiries", id); toast("Deleted"); break; }
+    case "meet-day": S.meet = Object.assign({}, S.meet, { day: id, slot: null, err: "" }); render(); break;
+    case "meet-slot": S.meet = Object.assign({}, S.meet, { slot: Number(id), err: "" }); render(); { const f = document.getElementById("mg-name"); if (f) f.scrollIntoView({ behavior: "smooth", block: "center" }); } break;
+    case "meet-ics": { const m = S.meet && S.meet.done; if (m) await downloadText("meet-and-greet.ics", icsFor(m)); break; }
+    case "meet-ics-admin": { const m = (S.meetings || []).find(x => x.id === id); if (m) await downloadText("meet-and-greet-" + m.date + ".ics", icsFor(m)); break; }
+    case "meet-done": { const m = (S.meetings || []).find(x => x.id === id); if (m) { await put("meetings", Object.assign({}, m, { status: "done" })); toast("Marked done"); } break; }
+    case "meet-cancel": { const m = (S.meetings || []).find(x => x.id === id); if (!m || !confirm("Cancel this Meet & Greet? Let " + m.name + " know too.")) break;
+      await put("meetings", Object.assign({}, m, { status: "cancelled" }));
+      if (S.mode === "live") { try { await db.collection("meetbusy").doc(id).delete(); } catch (e) {} if (m.eventId) { try { await callFn("meetRemoveEvent", { id }); } catch (e) {} } }
+      toast("Cancelled. The time is free again."); break; }
+    case "g-connect": {
+      el.disabled = true; el.textContent = "Opening Google...";
+      try { const r = await callFn("googleConnectStart"); if (r && r.url) { location.href = r.url; break; } throw new Error("Google didn't respond."); }
+      catch (e) { el.disabled = false; el.textContent = "Connect Google Calendar"; toast((e && e.message) || "Couldn't open Google."); }
+      break;
+    }
+    case "g-disconnect": {
+      if (!confirm("Disconnect Google Calendar? Meet & Greets will only use the times you set.")) break;
+      try { await callFn("googleDisconnect"); S.gStatus = undefined; toast("Google Calendar disconnected"); render(); } catch (e) { toast((e && e.message) || "Couldn't disconnect."); }
+      break;
+    }
     case "contact-again": S.contactSent = ""; render(); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); const roles = Object.assign({}, t.roles || {}); delete roles[id]; try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids, roles })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "staff-signout": S.moreOpen = false; ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
@@ -2581,6 +2747,33 @@ async function handleSubmit(e) {
       await u.reload(); S.authUser = auth.currentUser; forget(e.target); e.target.reset(); toast("Password saved. You can sign in with it now."); render();
     } catch (err) { toast(err && err.code === "auth/requires-recent-login" ? "For safety, sign out and sign in again, then set the password." : authErr(err)); }
     return;
+  }
+  if (kind === "meet-settings") {
+    const days = {};
+    for (let w = 0; w < 7; w++) { const f = String(fd.get("d" + w + "_from") || "10:00"), t = String(fd.get("d" + w + "_to") || "16:00"); days[w] = { on: fd.get("d" + w + "_on") === "on", from: /^\d{2}:\d{2}$/.test(f) ? f : "10:00", to: /^\d{2}:\d{2}$/.test(t) ? t : "16:00" }; if (days[w].on && toMins(days[w].to) <= toMins(days[w].from)) { toast(WEEKDAYS[w] + ": the end time is before the start time."); return; } }
+    const n = (k, lo, hi, dflt) => Math.max(lo, Math.min(hi, Math.round(Number(fd.get(k))) || dflt));
+    const mc = { enabled: fd.get("enabled") === "on", duration: n("duration", 10, 180, 30), buffer: n("buffer", 0, 120, 15), notice: Math.max(0, Math.min(336, Math.round(Number(fd.get("notice"))) || 0)), ahead: n("ahead", 1, 90, 28), location: String(fd.get("location") || "").trim().slice(0, 80) || "At your home", days };
+    try { await putCfg(Object.assign({}, S.cfg || {}, { meet: mc })); forget(e.target); toast("Meet & Greet times saved"); } catch (err) {}
+    return;
+  }
+  if (kind === "meet-book") {
+    const st = S.meet || {};
+    if (String(fd.get("website") || "")) { S.meet = { done: { date: st.day, start: hhmm(st.slot), end: hhmm(st.slot + 30), name: "there", dogName: "", address: "" } }; render(); return; }
+    const g = k => String(fd.get(k) || "").trim();
+    const rec = { name: g("name").slice(0, 80), dogName: g("dogName").slice(0, 60), email: g("email").toLowerCase().slice(0, 120), phone: g("phone").slice(0, 30), address: g("address").slice(0, 160), notes: g("notes").slice(0, 1000) };
+    const err = !rec.name ? "Add your name." : !rec.dogName ? "Add your dog's name." : !/^\S+@\S+\.\S+$/.test(rec.email) ? "Add an email address." : !rec.phone ? "Add a mobile number." : !rec.address ? "Add the address for the visit." : "";
+    if (err) { S.meet = Object.assign({}, st, { err }); render(); return; }
+    const days = meetDays(); if (!days.includes(st.day) || !meetSlots(st.day).includes(st.slot)) { S.meet = Object.assign({}, st, { slot: null, err: "That time has just gone. Please pick another." }); render(); return; }
+    const dur = Number(meetCfg().duration) || 30;
+    const m = Object.assign({ id: uid("mg"), date: st.day, start: hhmm(st.slot), end: hhmm(st.slot + dur), status: "booked", at: new Date().toISOString() }, rec);
+    try {
+      if (S.mode === "live") {
+        await db.collection("meetings").doc(m.id).set(strip(m));
+        await db.collection("meetbusy").doc(m.id).set({ date: m.date, start: m.start, end: m.end });
+        callFn("meetToCalendar", { id: m.id }).catch(() => {});
+      } else { S.meetings.push(m); }
+    } catch (er) { S.meet = Object.assign({}, st, { err: "Couldn't book that. Check your connection and try again." }); render(); return; }
+    S.meet = { done: m }; forget(e.target); render(); window.scrollTo(0, 0); return;
   }
   if (kind === "contact") {
     if (String(fd.get("website") || "")) { S.contactSent = "there"; render(); return; }

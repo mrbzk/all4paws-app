@@ -64,6 +64,32 @@ service cloud.firestore {
       allow read, update, delete: if isOwner();
     }
 
+    // Meet & Greets: anyone can book one; the team manages them
+    match /meetings/{id} {
+      allow create: if request.resource.data.keys().hasOnly(['date', 'start', 'end', 'name', 'dogName', 'email', 'phone', 'address', 'notes', 'status', 'at'])
+        && request.resource.data.status == 'booked'
+        && request.resource.data.date is string && request.resource.data.date.matches('[0-9]{4}-[0-9]{2}-[0-9]{2}')
+        && request.resource.data.start is string && request.resource.data.start.matches('[0-9]{2}:[0-9]{2}')
+        && request.resource.data.end is string && request.resource.data.end.matches('[0-9]{2}:[0-9]{2}')
+        && request.resource.data.name is string && request.resource.data.name.size() > 0 && request.resource.data.name.size() <= 80
+        && request.resource.data.email is string && request.resource.data.email.size() <= 120
+        && request.resource.data.phone is string && request.resource.data.phone.size() <= 30
+        && request.resource.data.address is string && request.resource.data.address.size() <= 160
+        && request.resource.data.notes is string && request.resource.data.notes.size() <= 1000;
+      allow read, update, delete: if isAdmin();
+    }
+    // Booked Meet & Greet times with no names, so the booking page can hide taken slots
+    match /meetbusy/{id} {
+      allow read: if true;
+      allow create: if exists(/databases/$(database)/documents/meetings/$(id))
+        && request.resource.data.keys().hasOnly(['date', 'start', 'end'])
+        && request.resource.data.date == get(/databases/$(database)/documents/meetings/$(id)).data.date
+        && request.resource.data.start == get(/databases/$(database)/documents/meetings/$(id)).data.start;
+      allow update, delete: if isAdmin();
+    }
+    // The connected Google Calendar and sign-in states: server only
+    match /google/{id} { allow read, write: if false; }
+
     match /busy/{id} {
       allow read: if true;
       allow create, update: if isAdmin() || (

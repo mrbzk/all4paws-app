@@ -32,7 +32,22 @@ if ! grep -q '^STRIPE_CLIENT_ID=ca_' functions/.env 2>/dev/null; then
   echo "Paste the platform's Connect client ID (starts ca_). It's public, not a secret."
   echo "Find it in the No Loss Leads Stripe account: Settings > Connect > Onboarding options > OAuth."
   read -r CID
-  case "$CID" in ca_*) echo "STRIPE_CLIENT_ID=$CID" > functions/.env ;; *) echo "That doesn't start with ca_. Run the script again."; exit 1 ;; esac
+  case "$CID" in ca_*) echo "STRIPE_CLIENT_ID=$CID" >> functions/.env ;; *) echo "That doesn't start with ca_. Run the script again."; exit 1 ;; esac
+fi
+
+echo "== Google Calendar for Meet & Greets (optional)"
+if ! grep -q '^GOOGLE_CLIENT_ID=' functions/.env 2>/dev/null; then
+  echo "Paste the Google OAuth client ID (ends .apps.googleusercontent.com), or press Enter to skip Google Calendar for now."
+  read -r GID
+  case "$GID" in *.apps.googleusercontent.com) echo "GOOGLE_CLIENT_ID=$GID" >> functions/.env ;; *) echo "GOOGLE_CLIENT_ID=" >> functions/.env; echo "Skipped. Meet & Greets will use the times set in the app." ;; esac
+fi
+if ! firebase functions:secrets:access GOOGLE_CLIENT_SECRET --project "$P" >/dev/null 2>&1; then
+  if grep -q '^GOOGLE_CLIENT_ID=.\+' functions/.env; then
+    echo "Paste the Google OAuth client secret when asked (it won't show on screen)."
+    firebase functions:secrets:set GOOGLE_CLIENT_SECRET --project "$P"
+  else
+    printf 'unset' | firebase functions:secrets:set GOOGLE_CLIENT_SECRET --project "$P" --data-file=- >/dev/null
+  fi
 fi
 
 echo "== Installing server packages"

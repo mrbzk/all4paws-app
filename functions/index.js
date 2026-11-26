@@ -7,6 +7,9 @@
 // The platform (the software owner) sets up once:
 //   firebase functions:secrets:set STRIPE_SECRET   (platform account's secret key, sk_test_... or sk_live_...)
 //   functions/.env: STRIPE_CLIENT_ID=ca_...         (the platform's public Connect client ID; deploy-functions.sh asks for it)
+// Google Calendar (optional, for Meet & Greets):
+//   functions/.env: GOOGLE_CLIENT_ID=....apps.googleusercontent.com
+//   firebase functions:secrets:set GOOGLE_CLIENT_SECRET   (or "unset" to leave Google Calendar off)
 const { onCall, HttpsError } = require("firebase-functions/v2/https");
 const { defineSecret } = require("firebase-functions/params");
 const admin = require("firebase-admin");
@@ -16,6 +19,7 @@ admin.initializeApp();
 const db = admin.firestore();
 const REGION = "europe-west2";
 const STRIPE_SECRET = defineSecret("STRIPE_SECRET");
+const GOOGLE_CLIENT_SECRET = defineSecret("GOOGLE_CLIENT_SECRET");
 const stripeFor = () => require("stripe")(STRIPE_SECRET.value());
 const round2 = n => Math.round((Number(n) || 0) * 100) / 100;
 const ACCOUNT_DOC = "stripe/account"; // the connected Stripe account (server-only)
@@ -203,4 +207,118 @@ exports.confirmCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, a
     }
   }
   return { paid };
+});
+
+// ---------- Google Calendar for Meet & Greets ----------
+const G_SCOPES = "openid email https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.freebusy";
+const G_CLIENT_ID = () => /\.apps\.googleusercontent\.com$/.test(process.env.GOOGLE_CLIENT_ID || "") ? process.env.GOOGLE_CLIENT_ID : "";
+const gSecret = () => { let v = ""; try { v = GOOGLE_CLIENT_SECRET.value() || ""; } catch (e) {} return v && v !== "unset" ? v : ""; };
+const gReady = () => !!(G_CLIENT_ID() && gSecret());
+const G_DOC = "google/account";
+const TZ = "Europe/London";
+
+async function gToken(params) {
+  const r = await fetch("https://oauth2.googleapis.com/token", { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" }, body: new URLSearchParams(Object.assign({ client_id: G_CLIENT_ID(), client_secret: gSecret() }, params)).toString() });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error_description || j.error || "Google refused the request.");
+  return j;
+}
+async function gAccess() {
+  if (!gReady()) return null;
+  const d = (await db.doc(G_DOC).get()).data();
+  if (!d || !d.refreshToken) return null;
+  const j = await gToken({ grant_type: "refresh_token", refresh_token: d.refreshToken });
+  return { token: j.access_token, calendarId: d.calendarId || "primary" };
+}
+async function gApi(acc, method, path, body) {
+  const r = await fetch("https://www.googleapis.com/calendar/v3" + path, { method, headers: { Authorization: "Bearer " + acc.token, "Content-Type": "application/json" }, body: body ? JSON.stringify(body) : undefined });
+  if (method === "DELETE") return r.ok;
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error((j.error && j.error.message) || "Google Calendar error");
+  return j;
+}
+
+exports.googleStatus = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireOwner(req.auth);
+  if (!gReady()) return { connected: false, server: false, reason: "Google Calendar isn't set up on the server yet." };
+  const d = (await db.doc(G_DOC).get()).data();
+  return d && d.refreshToken ? { connected: true, server: true, email: d.email || "" } : { connected: false, server: true };
+});
+
+exports.googleConnectStart = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireOwner(req.auth);
+  if (!gReady()) throw new HttpsError("failed-precondition", "Google Calendar isn't set up on the server yet.");
+  const state = "g_" + crypto.randomBytes(24).toString("hex");
+  await db.doc("google/state_" + req.auth.uid).set({ state, at: Date.now(), redirect: originOf(req) + "/admin" });
+  const q = new URLSearchParams({ client_id: G_CLIENT_ID(), redirect_uri: originOf(req) + "/admin", response_type: "code", scope: G_SCOPES, access_type: "offline", prompt: "consent", include_granted_scopes: "true", state });
+  return { url: "https://accounts.google.com/o/oauth2/v2/auth?" + q.toString() };
+});
+
+exports.googleConnectFinish = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireOwner(req.auth);
+  const code = String((req.data || {}).code || ""); const state = String((req.data || {}).state || "");
+  const ref = db.doc("google/state_" + req.auth.uid); const saved = (await ref.get()).data();
+  await ref.delete().catch(() => {});
+  if (!saved || saved.state !== state || Date.now() - saved.at > 20 * 60 * 1000) throw new HttpsError("permission-denied", "That sign-in link expired. Click Connect Google Calendar again.");
+  let j;
+  try { j = await gToken({ grant_type: "authorization_code", code, redirect_uri: saved.redirect }); }
+  catch (e) { throw new HttpsError("failed-precondition", e.message); }
+  if (!j.refresh_token) throw new HttpsError("failed-precondition", "Google didn't give lasting access. Disconnect the app in your Google account settings and try again.");
+  let email = "";
+  try { email = JSON.parse(Buffer.from(String(j.id_token || "").split(".")[1] || "", "base64url").toString()).email || ""; } catch (e) {}
+  await db.doc(G_DOC).set({ refreshToken: j.refresh_token, email, calendarId: "primary", connectedAt: new Date().toISOString(), connectedBy: req.auth.token.email || req.auth.uid });
+  return { connected: true, server: true, email };
+});
+
+exports.googleDisconnect = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireOwner(req.auth);
+  const d = (await db.doc(G_DOC).get()).data();
+  if (d && d.refreshToken) { try { await fetch("https://oauth2.googleapis.com/revoke?token=" + encodeURIComponent(d.refreshToken), { method: "POST" }); } catch (e) {} }
+  await db.doc(G_DOC).delete();
+  return { connected: false };
+});
+
+// Public: busy times from Google Calendar, without any event details, so the booking page can hide them
+exports.meetBusy = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  const from = String((req.data || {}).from || ""), to = String((req.data || {}).to || "");
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(from) || !/^\d{4}-\d{2}-\d{2}$/.test(to)) return { busy: [] };
+  const span = (new Date(to) - new Date(from)) / 864e5; if (span < 0 || span > 92) return { busy: [] };
+  let acc; try { acc = await gAccess(); } catch (e) { return { busy: [] }; }
+  if (!acc) return { busy: [] };
+  try {
+    const j = await gApi(acc, "POST", "/freeBusy", { timeMin: new Date(from + "T00:00:00Z").toISOString(), timeMax: new Date(to + "T23:59:59Z").toISOString(), timeZone: TZ, items: [{ id: acc.calendarId }] });
+    const cal = (j.calendars || {})[acc.calendarId] || {};
+    return { busy: (cal.busy || []).map(b => ({ start: b.start, end: b.end })) };
+  } catch (e) { return { busy: [] }; }
+});
+
+// Public: add a just-booked Meet & Greet to the connected Google Calendar
+exports.meetToCalendar = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  const id = String((req.data || {}).id || ""); if (!/^[A-Za-z0-9_-]{4,60}$/.test(id)) return { ok: false };
+  const ref = db.doc("meetings/" + id); const snap = await ref.get(); if (!snap.exists) return { ok: false };
+  const m = snap.data();
+  if (m.eventId || m.status !== "booked" || Date.now() - new Date(m.at).getTime() > 15 * 60 * 1000) return { ok: false };
+  const acc = await gAccess().catch(() => null); if (!acc) return { ok: false };
+  const cfg = await mainCfg(); const biz = cfg.businessName || "ALL4PAWS";
+  try {
+    const ev = await gApi(acc, "POST", "/calendars/" + encodeURIComponent(acc.calendarId) + "/events", {
+      summary: "Meet & Greet: " + (m.name || "") + " with " + (m.dogName || "their dog"),
+      location: m.address || "",
+      description: [biz + " Meet & Greet booked online.", "Phone: " + (m.phone || ""), "Email: " + (m.email || ""), m.notes ? "Notes: " + m.notes : ""].filter(Boolean).join("\n"),
+      start: { dateTime: m.date + "T" + m.start + ":00", timeZone: TZ }, end: { dateTime: m.date + "T" + m.end + ":00", timeZone: TZ }
+    });
+    await ref.update({ eventId: ev.id });
+    return { ok: true };
+  } catch (e) { return { ok: false }; }
+});
+
+// Team: remove a cancelled Meet & Greet from Google Calendar
+exports.meetRemoveEvent = onCall({ region: REGION, secrets: [GOOGLE_CLIENT_SECRET] }, async req => {
+  await requireStaff(req.auth);
+  const id = String((req.data || {}).id || ""); const ref = db.doc("meetings/" + id); const snap = await ref.get();
+  if (!snap.exists || !snap.data().eventId) return { ok: false };
+  const acc = await gAccess().catch(() => null); if (!acc) return { ok: false };
+  await gApi(acc, "DELETE", "/calendars/" + encodeURIComponent(acc.calendarId) + "/events/" + encodeURIComponent(snap.data().eventId)).catch(() => false);
+  await ref.update({ eventId: admin.firestore.FieldValue.delete() });
+  return { ok: true };
 });
