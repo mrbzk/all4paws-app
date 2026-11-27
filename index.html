@@ -675,13 +675,13 @@ html{scroll-behavior:smooth}
 @media (max-width:860px){ .side .side-toggle{display:none!important} }
 @media (min-width:861px){
   .admin{transition:grid-template-columns .2s ease}
-  .side .side-toggle{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:8px;color:var(--muted);font-weight:600;font-size:.85rem}
+  .side .side-toggle{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:12px 12px 8px;margin-top:14px;border-top:1px solid var(--line);border-radius:0 0 8px 8px;border-radius:8px;color:var(--muted);font-weight:600;font-size:.85rem}
   .side-toggle:hover{background:var(--surface-2);color:var(--ink)}
   .side-toggle:focus-visible{outline:3px solid var(--sun)}
   .side-toggle svg.bi{width:20px;height:20px}
   .wrap.wrap-wide,body.admin-wide .top .wrap,body.admin-wide .banner .wrap{max-width:none}
   .admin.mini{grid-template-columns:52px minmax(0,1fr)}
-  .admin.mini .side .side-toggle{justify-content:center;padding:8px 0}
+  .admin.mini .side .side-toggle{justify-content:center;padding:12px 0 8px}
   .admin.mini .side-toggle span,.admin.mini .side .lbl-row > span{display:none}
   .admin.mini .side button{justify-content:center;padding:10px 0;position:relative}
   .admin.mini .side .lbl-row svg{width:20px;height:20px}
@@ -711,6 +711,18 @@ html{scroll-behavior:smooth}
 .gallery.n4{grid-template-columns:1fr 1fr}
 .gallery.n5{grid-template-columns:repeat(6,1fr)}.gallery.n5 figure{grid-column:span 2}.gallery.n5 figure:nth-child(-n+2){grid-column:span 3;aspect-ratio:4/3}
 .bmeta .row{margin-top:4px;gap:6px}
+/* Integrations cards */
+.int-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:12px}
+.int-card{min-width:0;aspect-ratio:1/1;display:flex;flex-direction:column;align-items:center;justify-content:space-between;text-align:center;gap:10px;padding:18px 14px;border:1px solid var(--line);border-radius:16px;background:var(--surface)}
+.int-card.on{border-color:#1E8E3E66;background:color-mix(in srgb,#1E8E3E 4%,var(--surface))}
+.int-ic{width:56px;height:56px;border-radius:14px;display:grid;place-items:center;background:var(--ic);color:#fff;box-shadow:0 4px 12px color-mix(in srgb,var(--ic) 35%,transparent)}
+.int-ic svg.bi{width:28px;height:28px}
+.int-txt{display:flex;flex-direction:column;gap:2px}
+.int-act{display:flex;gap:6px;align-items:center;justify-content:center}
+.int-connect{min-width:120px}
+.btn.int-on{background:#1E8E3E;border-color:#1E8E3E;color:#fff;cursor:default;pointer-events:none}
+.btn.int-on svg.bi{width:16px;height:16px}
+@media (max-width:640px){.int-grid{grid-template-columns:repeat(2,minmax(0,1fr));gap:10px}.int-card{aspect-ratio:auto;min-height:190px;padding:14px 8px;min-width:0}.int-ic{width:48px;height:48px}.int-txt strong{font-size:.95rem}.int-txt .small{font-size:.8rem}.int-act{gap:4px}.int-act .btn.sm:not(.icon-only){padding:8px 10px;font-size:.85rem}.int-connect{min-width:0;width:100%}.int-card{position:relative}.int-act{width:100%}.btn.int-on{width:100%;padding:0 10px;font-size:.85rem;gap:4px;min-height:40px}body .int-act .btn.icon-only{position:absolute;top:6px;right:6px;border:0;background:transparent}}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
@@ -1334,7 +1346,7 @@ async function stripeConnectReturn() {
     toast("Finishing the Google Calendar connection...");
     try { const r = await callFn("googleConnectFinish", { code, state }); S.gStatus = r; toast("Google Calendar connected" + (r && r.email ? " (" + r.email + ")" : "") + "."); }
     catch (e) { toast((e && e.message) || "Couldn't finish connecting Google Calendar."); S.gStatus = undefined; }
-    S.adminTab = "settings"; S.setTab = "integrations"; render(); return;
+    S.adminTab = "settings"; S.setTab = "integrations"; S.intOpen = null; render(); return;
   }
   try { if (FB_AUTH && FB_AUTH.auth.authStateReady) await FB_AUTH.auth.authStateReady(); } catch (e) {}
   for (let i = 0; i < 40 && !S.canAdmin; i++) await new Promise(r => setTimeout(r, 250));
@@ -1342,7 +1354,7 @@ async function stripeConnectReturn() {
   toast("Finishing the Stripe connection...");
   try { const r = await callFn("stripeConnectFinish", { code, state }); S.stripeStatus = r; toast("Stripe connected" + (r && r.account ? " to " + r.account : "") + "."); }
   catch (e) { toast((e && e.message) || "Couldn't finish connecting Stripe."); S.stripeStatus = undefined; }
-  S.adminTab = "settings"; S.setTab = "integrations"; render();
+  S.adminTab = "settings"; S.setTab = "integrations"; S.intOpen = null; render();
 }
 async function paidReturn() {
   const q = new URLSearchParams(location.search); const back = q.has("paid"); const ok = q.get("paid") === "1"; const cs = q.get("cs") || "";
@@ -1360,7 +1372,7 @@ async function paidReturn() {
   } catch (e) { if (back && ok) toast("Thanks. Your payment will show here shortly."); }
 }
 
-function integrationsCards(sec) {
+function integrationsCards(sec, which) {
   const hid = sec === "integrations" ? "" : " hidden"; const x = xeroCfg(); const st = stripeCfg();
   const pend = xeroEligible(false); const pendInv = new Set(pend.map(b => b.clientId)).size;
   let h = '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Xero</h3><p class="small muted">Turn completed, unpaid work into Xero invoices. One invoice per customer, with a line for each visit, dog and add-on.</p></div><span class="pill ' + (pendInv ? "requested" : "ok") + '">' + (pendInv ? pendInv + " ready to export" : "Nothing new") + "</span></div>" +
@@ -1378,6 +1390,7 @@ function integrationsCards(sec) {
   else if (ss.connected) conn = '<div class="row" style="justify-content:space-between;align-items:center"><p class="small"><strong>Connected to ' + esc(ss.account || "your Stripe account") + '.</strong> ' + (ss.live ? "Real cards are charged and the money goes to this account." : "Test mode: use Stripe test cards, no real money moves.") + '</p><button class="btn sm ghost danger" type="button" data-act="stripe-disconnect">Disconnect</button></div>';
   else if (ss.server === false || ss.err) conn = '<p class="small muted">' + esc(ss.reason || "The payment server isn't set up yet.") + "</p>";
   else conn = (ss.reason ? '<p class="small">' + esc(ss.reason) + "</p>" : "") + '<div class="row"><button class="btn primary" type="button" data-act="stripe-connect">Connect with Stripe</button></div><p class="small muted">Sign in to your Stripe account on Stripe\'s page and click Allow. No keys to copy. If you don\'t have a Stripe account yet, you can create one there.' + (ss.live ? "" : " Test mode is on, so Stripe will connect a test account.") + "</p>";
+  const xeroPart = h; h = "";
   h += '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Stripe</h3><p class="small muted">Take card payments and deposits. Customers pay on Stripe\'s secure page and the money goes straight to your own Stripe account. Bookings are marked paid automatically.</p></div><span class="pill ' + pillCls + '">' + pillTxt + "</span></div>" + conn +
     '<form class="stack" data-form="stripe-settings"><div class="field"><label for="st-mode">How customers pay by card</label>' + sel("mode", st.mode, [["checkout", "Card payments through your connected Stripe account"], ["links", "Payment Links (customer types the amount, you mark paid)"], ["off", "Off"]]) + '<span class="hint">Card payments start working once Stripe is connected.</span></div>' +
     '<div class="grid2"><div class="field"><label for="st-depositFor">Ask for a deposit on</label>' + sel("depositFor", st.depositFor, [["boarding", "Overnight stays only"], ["all", "Every booking"], ["none", "No deposits"]]) + '</div><div class="field"><label for="st-depositType">Deposit is</label>' + sel("depositType", st.depositType, [["fixed", "A fixed amount (" + curSym() + ")"], ["percent", "A percentage of the booking"]]) + '</div></div>' +
@@ -1387,7 +1400,7 @@ function integrationsCards(sec) {
 
     '<p class="small muted">Never paste a Stripe secret key into the app.</p><div class="row"><button class="btn" type="submit">Save Stripe settings</button></div></form></section>';
 
-  return h;
+  return which === "xero" ? xeroPart : which === "stripe" ? h : xeroPart + h;
 }
 
 // ----- sign-in (Firebase Authentication) -----
@@ -1621,6 +1634,8 @@ const LUCIDE = {
   card: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
   panelclose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>',
   panelopen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>',
+  receipt: '<path d="M4 2v20l2-1 2 1 2-1 2 1 2-1 2 1 2-1 2 1V2l-2 1-2-1-2 1-2-1-2 1-2-1-2 1Z"/><path d="M16 8h-6a2 2 0 1 0 0 4h4a2 2 0 1 1 0 4H8"/><path d="M12 17.5v-11"/>',
+  calendar: '<path d="M8 2v4"/><path d="M16 2v4"/><rect width="18" height="18" x="3" y="4" rx="2"/><path d="M3 10h18"/>',
   textsize: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>'
 };
 function lucide(name, cls) { return '<svg class="' + (cls || "bi") + '" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (name === "pound" ? curIconPaths() : LUCIDE[name] || "") + "</svg>"; }
@@ -2004,7 +2019,7 @@ function meetTodayCard() {
   return '<div class="card stack"><h3>Meet &amp; Greets today</h3>' + list.map(m => '<div class="row" style="justify-content:space-between"><span><strong>' + esc(m.start) + "</strong> " + esc(m.name) + " with " + esc(m.dogName || "their dog") + ' <span class="small muted">· ' + esc(m.address || "") + '</span></span><button class="btn sm" data-act="tab" data-id="meets">Open</button></div>').join("") + "</div>";
 }
 function meetSettingsCard(sec) {
-  const m = meetCfg(); const hid = sec === "meet" ? "" : " hidden"; const gs = S.gStatus;
+  const m = meetCfg(); const hid = secOn("meet") ? "" : " hidden"; const gs = S.gStatus;
   const order = [1, 2, 3, 4, 5, 6, 0];
   return '<section class="card stack" data-sec="meet"' + hid + '><div><h3>Meet &amp; Greets</h3><p class="small muted">When new customers can book a free Meet &amp; Greet from the website. ' + (gs && gs.connected ? "Google Calendar is connected, so busy times there are blocked too and new bookings are added to it." : "Connect Google Calendar in Integrations to block your busy times automatically.") + '</p></div>' +
     '<form class="stack" data-form="meet-settings"><label class="opt"><input type="checkbox" name="enabled"' + (m.enabled ? " checked" : "") + '><span><strong>Take Meet &amp; Greet bookings online</strong></span></label>' +
@@ -2059,6 +2074,29 @@ function brandImage(file, isLogo) {
     img.onerror = () => { URL.revokeObjectURL(u); rej(new Error("That file isn't a picture we can read.")); };
     img.src = u;
   });
+}
+// Integrations: square cards with Connect / Connected, and a gear for each one's settings
+const INTEGRATIONS = [["stripe", "Stripe", "Card payments and deposits", "card", "#635BFF"], ["google", "Google Calendar", "Meet & Greet availability", "calendar", "#1A73E8"], ["xero", "Xero", "Invoices for completed work", "receipt", "#13B5EA"]];
+function intConnected(k) {
+  if (k === "xero") return !!xeroCfg().enabled;
+  if (k === "stripe") { const st = stripeCfg(); return !!(S.stripeStatus && S.stripeStatus.connected) || (st.mode === "links" && !!(st.depositLink || st.payLink)); }
+  if (k === "google") return !!(S.gStatus && S.gStatus.connected);
+  return false;
+}
+function integrationsHub(sec) {
+  if (sec !== "integrations") return "";
+  if (S.fb && S.canAdmin) { if (S.stripeStatus === undefined && !S.stripeLoading) setTimeout(loadStripeStatus, 0); if (S.gStatus === undefined && !S.gStatusLoading) setTimeout(loadGoogleStatus, 0); }
+  const open = INTEGRATIONS.some(x => x[0] === S.intOpen) ? S.intOpen : null;
+  if (open) {
+    const name = INTEGRATIONS.find(x => x[0] === open)[1];
+    return '<div class="stack"><button type="button" class="backlink" data-act="int-back"><span aria-hidden="true">←</span> All integrations</button>' + (open === "xero" ? integrationsCards(sec, "xero") : open === "stripe" ? integrationsCards(sec, "stripe") : googleCard(sec)) + "</div>";
+  }
+  return '<section class="card stack" data-sec="integrations"><div><h3>Integrations</h3><p class="small muted">Connect the tools you use. Once one is connected, use the gear to change its settings.</p></div><div class="int-grid">' + INTEGRATIONS.map(([k, name, what, ic, col]) => {
+    const on = intConnected(k);
+    return '<div class="int-card' + (on ? " on" : "") + '"><div class="int-ic" style="--ic:' + col + '">' + lucide(ic) + '</div><div class="int-txt"><strong>' + name + '</strong><span class="small muted">' + what + '</span></div><div class="int-act">' +
+      (on ? '<span class="btn sm int-on" role="status">' + lucide("check") + 'Connected</span><button type="button" class="btn sm icon-only" data-act="int-open" data-id="' + k + '" title="' + name + ' settings" aria-label="' + name + ' settings">' + IC_GEAR + "</button>"
+          : '<button type="button" class="btn sm primary int-connect" data-act="int-connect" data-id="' + k + '">Connect</button>') + "</div></div>";
+  }).join("") + "</div></section>";
 }
 function isOwner() { return !!S.canAdmin && S.role !== "staff"; }
 function roleOf(team, em) { return ((team && team.roles) || {})[String(em || "").toLowerCase()] === "staff" ? "staff" : "admin"; }
@@ -2428,7 +2466,7 @@ function viewAdmin() {
   const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out" title="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
   const mini = sideMini();
   const tog = '<button type="button" class="side-toggle" data-act="side-toggle" aria-expanded="' + !mini + '" aria-label="' + (mini ? "Show menu" : "Hide menu") + '" title="' + (mini ? "Show menu" : "Hide menu") + '">' + lucide(mini ? "panelopen" : "panelclose") + "<span>Hide menu</span></button>";
-  return '<div class="wrap' + (mini ? " wrap-wide" : "") + '"><div class="admin' + (mini ? " mini" : "") + '"><nav class="side" aria-label="Back office">' + tog + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
+  return '<div class="wrap' + (mini ? " wrap-wide" : "") + '"><div class="admin' + (mini ? " mini" : "") + '"><nav class="side" aria-label="Back office">' + side + out + tog + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
 }
 function actionsFor(b) {
   const a = [];
@@ -2719,6 +2757,10 @@ function adminBilling() {
   return h;
 }
 const SET_SECS = [["business", "Business"], ["hours", "Days and limits"], ["meet", "Meet & Greets"], ["approvals", "Approvals"], ["team", "Team"], ["logins", "Logins"], ["integrations", "Integrations"], ["prices", "Prices"], ["addons", "Add-ons"], ["comfort", "Display"]];
+// Settings tabs, each grouping related sections
+const SET_GROUPS = [["business", "Business", ["business"]], ["services", "Services & prices", ["prices", "addons"]], ["schedule", "Schedule", ["hours", "approvals", "meet"]], ["team", "Team & logins", ["team", "logins"]], ["integrations", "Integrations", ["integrations"]], ["display", "Display", ["comfort"]]];
+function setGroup() { const t = S.setTab || "business"; const g = SET_GROUPS.find(x => x[0] === t) || SET_GROUPS.find(x => x[2].includes(t)); return g ? g[0] : "business"; }
+function secOn(k) { return (SET_GROUPS.find(x => x[0] === setGroup()) || SET_GROUPS[0])[2].includes(k); }
 const PER_HELP = { dog: "Per dog (2 dogs = charged twice)", dognight: "Per dog per night (2 dogs, 3 nights = 6 times)", booking: "Once per visit or stay", night: "Per night (3 nights = 3 times)" };
 function drawDaysOff() {
   const hid = document.getElementById("s-daysoff"); const box = document.getElementById("daysoff-list"); if (!hid || !box) return;
@@ -2726,18 +2768,18 @@ function drawDaysOff() {
   box.innerHTML = list.length ? list.map(d0 => '<span class="flag">' + esc(fmtDate(d0, { weekday: "short", day: "numeric", month: "short", year: "numeric" })) + ' <button type="button" class="linkbtn" data-act="dayoff-rm" data-id="' + esc(d0) + '" aria-label="Remove ' + esc(d0) + '">×</button></span>').join("") : '<span class="small muted">No days off set.</span>';
 }
 function adminSettings() {
-  const c = C(); const sec = S.setTab || "business";
+  const c = C(); const sec = setGroup(); let lg = "";
   const hours = Array.from({ length: 24 }, (_, i) => i);
-  const part = (k, title, intro, inner) => '<section class="card stack" data-sec="' + k + '"' + (sec === k ? "" : " hidden") + '><div><h3>' + title + '</h3><p class="small muted">' + intro + "</p></div>" + inner + "</section>";
+  const part = (k, title, intro, inner) => '<section class="card stack" data-sec="' + k + '"' + (secOn(k) ? "" : " hidden") + '><div><h3>' + title + '</h3><p class="small muted">' + intro + "</p></div>" + inner + "</section>";
   let h = '<div class="head"><div><h2>Settings</h2><p class="muted">One section at a time. Press Save when you\'re done.</p></div></div>';
-  h += '<div class="subnav" role="tablist" aria-label="Settings sections">' + SET_SECS.map(([k, l]) => '<button type="button" role="tab" data-act="settab" data-id="' + k + '"' + (sec === k ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + ">" + l + "</button>").join("") + "</div>";
+  h += '<div class="subnav" role="tablist" aria-label="Settings sections">' + SET_GROUPS.map(([k, l]) => '<button type="button" role="tab" data-act="settab" data-id="' + k + '"' + (sec === k ? ' class="on" aria-selected="true"' : ' aria-selected="false"') + ">" + l + "</button>").join("") + "</div>";
   if (S.fb && S.authUser) { const hasPw = (S.authUser.providerData || []).some(x => x.providerId === "password");
-    h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
-  if (S.fb) h += '<section class="card stack" data-sec="logins"' + (sec === "logins" ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => { const me = S.authUser && String(S.authUser.email).toLowerCase() === em; const r = roleOf(S.team, em); return '<li class="li"><span>' + esc(em) + (me ? ' <span class="muted small">(you)</span>' : "") + ' <span class="pill ' + (r === "admin" ? "confirmed" : "requested") + '">' + (r === "admin" ? "Admin" : "Staff") + "</span></span>" + (me ? "" : '<span class="row"><button type="button" class="btn sm" data-act="admin-role" data-id="' + esc(em) + '">' + (r === "admin" ? "Make staff" : "Make admin") + '</button><button type="button" class="btn sm ghost danger" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button></span>') + "</li>"; }).join("") + '</ul><p class="small muted"><strong>Admin</strong> sees everything, including Money, Settings and the Contact form. <strong>Staff</strong> see the day-to-day work only: Today, Diary, Customers and Messages.</p><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><label class="sr-only" for="ad-role">Role</label><select id="ad-role" name="role" style="width:auto"><option value="staff">Staff</option><option value="admin">Admin</option></select><button class="btn" type="submit">Add</button></form></section>';
-  h += integrationsCards(sec) + googleCard(sec) + meetSettingsCard(sec);
+    lg += '<section class="card stack" data-sec="logins"' + (secOn("logins") ? "" : " hidden") + '><div><h3>Your sign-in</h3><p class="small muted">' + esc(S.authUser.email) + ". " + (hasPw ? "You can sign in with Google or your password." : "Add a password so you can sign in with your email as well as Google.") + '</p></div><form class="stack" data-form="my-password"><div class="grid2"><div class="field"><label for="pw-1">' + (hasPw ? "New password" : "Password") + '</label><input type="password" id="pw-1" name="pw1" required minlength="8" autocomplete="new-password"><span class="hint">At least 8 characters.</span></div><div class="field"><label for="pw-2">Type it again</label><input type="password" id="pw-2" name="pw2" required minlength="8" autocomplete="new-password"></div></div><div class="row"><button class="btn" type="submit">' + (hasPw ? "Change password" : "Add password") + "</button></div></form></section>"; }
+  if (S.fb) lg += '<section class="card stack" data-sec="logins"' + (secOn("logins") ? "" : " hidden") + '><div><h3>Back office access</h3><p class="small muted">People who can sign in to the back office. They sign in with this email, using Google or a password.</p></div><ul class="list">' + (S.admins || []).map(em => { const me = S.authUser && String(S.authUser.email).toLowerCase() === em; const r = roleOf(S.team, em); return '<li class="li"><span>' + esc(em) + (me ? ' <span class="muted small">(you)</span>' : "") + ' <span class="pill ' + (r === "admin" ? "confirmed" : "requested") + '">' + (r === "admin" ? "Admin" : "Staff") + "</span></span>" + (me ? "" : '<span class="row"><button type="button" class="btn sm" data-act="admin-role" data-id="' + esc(em) + '">' + (r === "admin" ? "Make staff" : "Make admin") + '</button><button type="button" class="btn sm ghost danger" data-act="admin-remove" data-id="' + esc(em) + '">Remove</button></span>') + "</li>"; }).join("") + '</ul><p class="small muted"><strong>Admin</strong> sees everything, including Money, Settings and the Contact form. <strong>Staff</strong> see the day-to-day work only: Today, Diary, Customers and Messages.</p><form class="row" data-form="admin-add"><label class="sr-only" for="ad-email">Email to add</label><input type="email" id="ad-email" name="email" placeholder="lauren@example.com" required style="flex:1;min-width:200px"><label class="sr-only" for="ad-role">Role</label><select id="ad-role" name="role" style="width:auto"><option value="staff">Staff</option><option value="admin">Admin</option></select><button class="btn" type="submit">Add</button></form></section>';
+  h += integrationsHub(sec);
   h += '<form class="stack" data-form="settings">';
-  if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
-  if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
+  if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack" data-sec="business"' + (secOn("business") ? "" : " hidden") + '><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
+  if (S.fb && !S.clients.length) h += '<div class="card stack" data-sec="business"' + (secOn("business") ? "" : " hidden") + '><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
   h += part("business", "Business", "How you appear on the booking site.", '<div class="grid2"><div class="field"><label for="s-name">Business name</label><input type="text" id="s-name" name="businessName" value="' + esc(c.businessName) + '"></div><div class="field"><label for="s-area">Area served</label><input type="text" id="s-area" name="area" value="' + esc(c.area) + '"></div><div class="field" style="grid-column:1/-1"><label for="s-tag">Headline on the booking site</label><input type="text" id="s-tag" name="tagline" value="' + esc(c.tagline) + '"></div><div class="field"><label for="s-phone">Phone</label><input type="text" id="s-phone" name="phone" value="' + esc(c.phone) + '"></div><div class="field"><label for="s-email">Email</label><input type="text" id="s-email" name="email" value="' + esc(c.email) + '"></div><div class="field"><label for="s-cur">Currency</label><select id="s-cur" name="currencyCode">' + CURRENCIES.map(x => '<option value="' + x[0] + '"' + (curCode() === x[0] ? " selected" : "") + ">" + esc(x[2] + " (" + x[1] + ")") + "</option>").join("") + '</select><span class="hint">Changes prices, invoices and card payments everywhere.</span></div>' + "</div>" + '<div class="field"><label for="s-about">About us page</label><textarea id="s-about" name="aboutText" rows="7">' + esc(c.aboutText || ABOUT_DEFAULT) + '</textarea><span class="hint">Leave a blank line between paragraphs.</span></div>');
   h += part("hours", "Days and limits", "Protect your time. Customers can\'t book days off, or past a person\'s daily limit.",
     '<div class="field"><label for="s-dayoff">Days off</label><div class="row"><input type="date" id="s-dayoff" style="max-width:220px"><button class="btn" type="button" data-act="dayoff-add">Add day off</button></div><input type="hidden" id="s-daysoff" name="daysOff" value="' + esc((c.daysOff || []).join(",")) + '"><div id="daysoff-list" class="flags-row" style="margin-top:8px">' + ((c.daysOff || []).length ? c.daysOff.map(d0 => '<span class="flag">' + esc(fmtDate(d0, { weekday: "short", day: "numeric", month: "short", year: "numeric" })) + ' <button type="button" class="linkbtn" data-act="dayoff-rm" data-id="' + esc(d0) + '" aria-label="Remove ' + esc(d0) + '">×</button></span>').join("") : '<span class="small muted">No days off set.</span>') + '</div></div>' +
@@ -2752,9 +2794,9 @@ function adminSettings() {
   const aoList = (c.addons || []).concat(S.newAddons || []);
   h += part("addons", "Add-ons", "Extras customers can tick after choosing a service.",
     '<div class="row"><button class="btn sm" type="button" data-act="addon-new">New add-on</button><span class="small muted">Save first if you\'ve changed anything else.</span></div>' + aoList.map(a => '<div class="ao-row"><div class="field"><label for="ao-n-' + esc(a.id) + '">Name</label><input type="text" id="ao-n-' + esc(a.id) + '" name="ao_name_' + esc(a.id) + '" value="' + esc(a.name) + '"></div><div class="field"><label for="ao-p-' + esc(a.id) + '">Price</label><input type="number" step="0.5" min="0" id="ao-p-' + esc(a.id) + '" name="ao_price_' + esc(a.id) + '" value="' + esc(a.price) + '"></div><div class="field"><label for="ao-u-' + esc(a.id) + '">Charged</label><select id="ao-u-' + esc(a.id) + '" name="ao_per_' + esc(a.id) + '">' + Object.keys(PER_HELP).map(k => '<option value="' + k + '"' + (a.per === k ? " selected" : "") + ">" + PER_HELP[k] + "</option>").join("") + '</select></div><div class="field" style="grid-column:1/-1"><label for="ao-d-' + esc(a.id) + '">Description</label><input type="text" id="ao-d-' + esc(a.id) + '" name="ao_desc_' + esc(a.id) + '" value="' + esc(a.desc || "") + '"></div><div class="svc-checks"><span class="small muted" style="align-self:center">Offer with:</span>' + c.services.map(sv => '<label><input type="checkbox" name="ao_svc_' + esc(a.id) + '" value="' + esc(sv.id) + '"' + ((a.services || []).includes(sv.id) ? " checked" : "") + ">" + esc(sv.name) + "</label>").join("") + '</div><div class="flags"><label><input type="checkbox" name="ao_active_' + esc(a.id) + '"' + (a.active !== false ? " checked" : "") + '>Offered</label><label><input type="checkbox" name="ao_del_' + esc(a.id) + '">Delete</label></div></div>').join(""));
-  h += '<section class="card stack" data-sec="comfort"' + (sec === "comfort" ? "" : " hidden") + '><div><h3>Display</h3><p class="small muted">Make the screen easier on your eyes and brain. Saved straight away, no need to press Save.</p></div>' + comfortControls() + "</section>";
-  h += '<div class="row savebar"' + (sec === "logins" || sec === "integrations" || sec === "meet" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
-  h += brandCard(sec);
+  h += '<section class="card stack" data-sec="comfort"' + (secOn("comfort") ? "" : " hidden") + '><div><h3>Display</h3><p class="small muted">Make the screen easier on your eyes and brain. Saved straight away, no need to press Save.</p></div>' + comfortControls() + "</section>";
+  h += '<div class="row savebar"' + (sec === "integrations" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
+  h += meetSettingsCard(sec) + lg + brandCard(sec);
   return h;
 }
 
@@ -2897,6 +2939,20 @@ async function handleClick(e) {
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "side-toggle": { const v = !sideMini(); S.sideMini = v; try { localStorage.setItem("dogco-side-mini", v ? "1" : "0"); } catch (e) {} render(); break; }
+    case "int-open": S.intOpen = id; render(); scrollTo({ top: 0, behavior: "instant" }); break;
+    case "int-back": S.intOpen = null; render(); break;
+    case "int-connect": {
+      if (!isOwner()) break;
+      if (id === "xero") { await putCfg(Object.assign({}, S.cfg || {}, { xero: Object.assign({}, xeroCfg(), { enabled: true }) })); toast("Xero connected. Set your invoice options."); S.intOpen = "xero"; render(); break; }
+      const ready = id === "stripe" ? S.stripeStatus && S.stripeStatus.server !== false && !S.stripeStatus.err : S.gStatus && S.gStatus.server !== false && !S.gStatus.err;
+      if (S.fb && ready) {
+        el.disabled = true; el.textContent = "Opening...";
+        try { const r = await callFn(id === "stripe" ? "stripeConnectStart" : "googleConnectStart"); if (r && r.url) { location.href = r.url; break; } throw new Error("No sign-in page came back."); }
+        catch (e) { el.disabled = false; el.textContent = "Connect"; toast((e && e.message) || "Couldn't open the sign-in page."); }
+        break;
+      }
+      S.intOpen = id; render(); toast(S.fb ? "This needs a one-time server setup first. See the details below." : "Connecting works on the live site."); break;
+    }
     case "admin-more": S.moreOpen = !S.moreOpen; render(); break;
     case "admin-site": S.moreOpen = false; navTo("home"); render(); break;
     case "tab": S.moreOpen = false; S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo({ top: 0, behavior: "instant" }); break;
@@ -2916,7 +2972,7 @@ async function handleClick(e) {
     case "undo": await runUndo(); break;
     case "comfort-open": S.modal = { type: "comfort" }; render(); break;
     case "wrap-tick": { const t = todayISO(); const cur = (S.days || []).find(x => x.id === t) || { id: t }; await put("days", Object.assign({}, cur, { [id]: true })); toast(id === "money" ? "Money checked" : "Tomorrow checked"); break; }
-    case "settab": { S.setTab = id; render(); document.querySelectorAll("[data-sec]").forEach(x => { x.hidden = x.dataset.sec !== id; }); document.querySelectorAll("[data-act=settab]").forEach(x => { const on = x.dataset.id === id; x.classList.toggle("on", on); x.setAttribute("aria-selected", on ? "true" : "false"); }); break; }
+    case "settab": { S.setTab = id; S.intOpen = null; render(); document.querySelectorAll("[data-sec]").forEach(x => { x.hidden = !secOn(x.dataset.sec); }); document.querySelectorAll("[data-act=settab]").forEach(x => { const on = x.dataset.id === id; x.classList.toggle("on", on); x.setAttribute("aria-selected", on ? "true" : "false"); }); break; }
     case "dayoff-add": { const inp = document.getElementById("s-dayoff"); const hid = document.getElementById("s-daysoff"); if (!inp || !hid || !inp.value) break; const list = new Set(hid.value ? hid.value.split(",") : []); list.add(inp.value); hid.value = [...list].sort().join(","); drawDaysOff(); inp.value = ""; break; }
     case "dayoff-rm": { const hid = document.getElementById("s-daysoff"); if (!hid) break; hid.value = hid.value.split(",").filter(x => x && x !== id).join(","); drawDaysOff(); break; }
     case "addon-new": S.newAddons = (S.newAddons || []).concat([{ id: "a-" + Date.now().toString(36), name: "New add-on", desc: "", price: 0, per: "dog", services: [], active: true }]); render(); break;
