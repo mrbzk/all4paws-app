@@ -3,10 +3,13 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<meta name="theme-color" content="#FFFFFF">
+<meta name="theme-color" content="#FAFAFB" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#121214" media="(prefers-color-scheme: dark)">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-title" content="Dog Co.">
+<meta name="apple-mobile-web-app-title" content="ALL4PAWS">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="application-name" content="ALL4PAWS">
 <meta name="format-detection" content="telephone=no">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icons/favicon-32.png" sizes="32x32" type="image/png">
@@ -382,7 +385,8 @@ table.inv tfoot td{background:var(--surface-2);border-bottom:0}
   body{padding-bottom:calc(70px + env(safe-area-inset-bottom))}
   body.has-mbar{padding-bottom:calc(140px + env(safe-area-inset-bottom))}
   .top{backdrop-filter:none;-webkit-backdrop-filter:none;background:var(--bg)}
-  .top .wrap{min-height:54px;padding-top:env(safe-area-inset-top)}
+  .top .wrap{min-height:54px}
+  .top{padding-top:env(safe-area-inset-top)}
   .nav{position:fixed;left:0;right:0;bottom:0;z-index:40;margin:0;display:grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:0;background:var(--surface);border-top:1px solid var(--line);padding:4px 4px calc(4px + env(safe-area-inset-bottom));box-shadow:0 -4px 16px rgba(0,0,0,.06)}
   .nav a{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;border-radius:10px;font-size:.72rem;padding:6px 2px;min-height:54px;text-align:center;line-height:1.1}
   .nav a.admin-link{border:0}
@@ -571,6 +575,51 @@ html.calm{--c-walk:#6E8C84;--c-boarding:#7C87A6;--c-daycare:#A8977A;--c-groom:#A
 html.calm .badge,html.calm .nbadge{background:var(--muted)}
 @media (prefers-color-scheme: dark){ html.calm:not([data-theme="light"]){--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--warn-soft:#2B2820;--bad-soft:#33221F;--info-soft:#1E2230} }
 html.calm[data-theme="dark"]{--sun:#5C5442;--sun-soft:#2B2820;--warn:#C8B88E;--warn-soft:#2B2820;--bad-soft:#33221F;--info-soft:#1E2230}
+/* ===== App feel (iOS and Android) ===== */
+html{-webkit-text-size-adjust:100%;text-size-adjust:100%}
+body{-webkit-tap-highlight-color:transparent}
+a,button,label,select,input,textarea,[role=button]{touch-action:manipulation}
+.nav,.side,.subnav,.seg,.more-sheet,.btn,.mday,.mcell,.tabs{-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}
+@media (pointer:coarse){
+  .btn,.iconbtn,.mday,.mcell,.chips button,.checks label,.nav a,.side button,.subnav button,.more-sheet button,.li[data-act],.client-list button{transition:transform .12s ease,opacity .12s ease,background-color .12s ease}
+  .btn:active,.iconbtn:active,.mday:active,.mcell:active,.chips button:active,.checks label:active,.subnav button:active,.client-list button:active{transform:scale(.97);opacity:.85}
+  .nav a:active,.side button:active,.more-sheet button:active{opacity:.6}
+  .linkbtn,.backlink{min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px}
+  footer .linkbtn{min-height:44px}
+  .subnav button,.tabs button{min-height:44px}
+  .top .wrap > a,.top .wrap > button{min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px}
+}
+@media (max-width:640px){
+  /* bottom tab bars: tinted icon with a pill indicator, like iOS and Material 3 */
+  .nav,.side{background:color-mix(in srgb,var(--surface) 92%,transparent);-webkit-backdrop-filter:saturate(1.6) blur(14px);backdrop-filter:saturate(1.6) blur(14px);box-shadow:none;padding-top:6px}
+  .nav a,.side button{background:none!important;color:var(--muted);font-size:.75rem;font-weight:600;gap:4px;min-height:56px;border-radius:12px;box-shadow:none}
+  .nav a .ic,.side .lbl-row svg{width:24px;height:24px;padding:4px 18px;box-sizing:content-box;border-radius:999px;transition:background-color .15s ease}
+  .side .lbl-row{gap:4px}
+  .nav a[aria-current="page"],.side button[aria-current="true"]{background:none!important;color:var(--accent)}
+  .nav a[aria-current="page"] .ic,.side button[aria-current="true"] .lbl-row svg{background:var(--accent-soft,color-mix(in srgb,var(--accent) 14%,transparent))}
+  .nav a[aria-current="page"] span,.side button[aria-current="true"] .lbl-row span{color:var(--accent)}
+  .side .badge,.side .cnt-side{top:4px;left:calc(50% + 8px)}
+  /* main actions: full width and stacked */
+  .hero .row > .btn,.about-hero .row > .btn,section.block > .wrap > .row > .btn.lg,.card .row > .btn.primary:only-child{flex:1 1 100%;width:100%;justify-content:center}
+  .btn.lg{min-height:52px}
+  /* the settings save bar becomes a proper bar above the tab bar */
+  .savebar{margin:0 -16px;padding:10px 16px;background:color-mix(in srgb,var(--bg) 92%,transparent);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px);border-top:1px solid var(--line)}
+  /* pop-ups slide up from the bottom as sheets */
+  .scrim{place-items:end stretch;padding:0}
+  .modal{max-width:none;border-radius:20px 20px 0 0;max-height:92dvh;padding:12px 18px calc(18px + env(safe-area-inset-bottom));animation:sheet-up .22s ease-out}
+  .modal::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 6px}
+  .more-sheet{bottom:calc(76px + env(safe-area-inset-bottom));animation:sheet-up .18s ease-out}
+  .more-sheet button{min-height:48px;box-sizing:border-box}
+  /* small text up to app minimums */
+  .chat .meta,.bubble .meta,.meta{font-size:.75rem}
+  body .subnav button,body .settabs button{min-height:44px;box-sizing:border-box}
+  body .linkbtn,body .backlink{min-height:44px;box-sizing:border-box;display:inline-flex;align-items:center;gap:6px}
+  /* chat fills the screen */
+  .chat:not(.mini){height:calc(100dvh - 360px - env(safe-area-inset-bottom));min-height:260px}
+  .crow .iconbtn{width:40px;height:40px}
+  .toast{bottom:calc(84px + env(safe-area-inset-bottom));max-width:calc(100% - 32px);text-align:center}
+}
+@keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
 /* ALL4PAWS look: light pink and white, bold and simple */
@@ -1345,7 +1394,7 @@ function view() {
   const h = USE_PATHS ? location.pathname.replace(/^\/+|\/+$/g, "") : location.hash.slice(1);
   return ROUTES.includes(h) ? h : "home";
 }
-function routeChanged() { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); }
+function routeChanged() { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; S.modal = null; S.moreOpen = false; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); }
 function navTo(v) {
   if (!USE_PATHS) { location.hash = v; return; }
   const path = v === "home" ? "/" : "/" + v;
@@ -1549,7 +1598,7 @@ function bubble(m, side) {
   const who = m.from === "team" ? (m.staffName ? m.staffName + ", " + C().businessName : C().businessName) : ((client(m.clientId) || {}).name || "Customer");
   const pics = (m.photos || []).filter(ph => photoSrc(ph));
   return '<div class="bub ' + (mine ? "me" : "them") + '">' + (m.petNames ? '<div class="tagline">' + esc(m.petNames) + "</div>" : "") + (m.text ? "<p>" + esc(m.text).replace(/\n/g, "<br>") + "</p>" : "") +
-    (pics.length ? '<div class="bphotos n' + Math.min(pics.length, 4) + '">' + pics.map(ph => { const img = '<img src="' + esc(photoSrc(ph)) + '" alt="Photo' + (m.petNames ? " of " + esc(m.petNames) : "") + '" loading="lazy">'; return ph.id || /^https:/.test(ph.url || "") ? '<a href="' + esc(photoSrc(ph)) + '" target="_blank" rel="noopener">' + img + "</a>" : img; }).join("") + "</div>" : "") +
+    (pics.length ? '<div class="bphotos n' + Math.min(pics.length, 4) + '">' + pics.map(ph => { const img = '<img loading="lazy" decoding="async" src="' + esc(photoSrc(ph)) + '" alt="Photo' + (m.petNames ? " of " + esc(m.petNames) : "") + '" loading="lazy">'; return ph.id || /^https:/.test(ph.url || "") ? '<a href="' + esc(photoSrc(ph)) + '" target="_blank" rel="noopener">' + img + "</a>" : img; }).join("") + "</div>" : "") +
     '<div class="meta">' + esc(mine ? "You" + (m.from === "team" && m.staffName ? " (" + m.staffName + ")" : "") : who) + " · " + esc(stamp(m.createdAt)) + (mine ? (m.from === "team" ? (m.readByClient ? " · Seen" : " · Sent") : (m.readByTeam ? " · Seen" : " · Sent")) : "") + "</div></div>";
 }
 function cmpFor(k) { if (!S.cmp || S.cmp.key !== k) S.cmp = { key: k, text: "", photos: [], pets: [], err: "" }; return S.cmp; }
@@ -1564,7 +1613,7 @@ function composer(side, cid) {
     (quick.length ? '<div class="chips">' + quick.map(q => '<button type="button" data-act="cmp-quick" data-id="' + esc(q) + '">' + esc(q) + "</button>").join("") + "</div>" : "") +
     (c.photos.length ? '<div class="thumbs">' + c.photos.map((ph, i) => '<div class="ph-wrap"><img src="' + esc(ph.preview) + '" alt="Photo ' + (i + 1) + ' to send"><button type="button" data-act="cmp-rm" data-id="' + i + '" aria-label="Remove photo ' + (i + 1) + '">×</button></div>').join("") + "</div>" : "") +
     (c.err ? '<div class="errors" role="alert">' + esc(c.err) + "</div>" : "") +
-    '<div class="crow"><label class="iconbtn cam" for="cmp-cam" title="Take a photo"><span class="vh">Take a photo</span>' + IC_CAM + '<input type="file" id="cmp-cam" class="vh" accept="image/*" capture="environment"></label><label class="iconbtn" for="cmp-files" title="Add photos"><span class="vh">Add photos</span>' + IC_PIC + '<input type="file" id="cmp-files" class="vh" accept="image/*" multiple></label><label for="cmp-text" class="vh">Message</label><textarea id="cmp-text" data-c="text" rows="2" maxlength="2000" placeholder="' + (side === "team" ? "Write to " + esc(((client(cid) || {}).name || "").split(" ")[0] || "the owner") : "Write a message") + '">' + esc(c.text) + '</textarea><button class="btn primary" type="button" data-act="cmp-send"' + (c.busy ? " disabled" : "") + ">" + (c.busy ? "Sending…" : "Send") + "</button></div></div>";
+    '<div class="crow"><label class="iconbtn cam" for="cmp-cam" title="Take a photo"><span class="vh">Take a photo</span>' + IC_CAM + '<input type="file" id="cmp-cam" class="vh" accept="image/*" capture="environment"></label><label class="iconbtn" for="cmp-files" title="Add photos"><span class="vh">Add photos</span>' + IC_PIC + '<input type="file" id="cmp-files" class="vh" accept="image/*" multiple></label><label for="cmp-text" class="vh">Message</label><textarea id="cmp-text" data-c="text" rows="2" maxlength="2000" enterkeyhint="send" autocapitalize="sentences" placeholder="' + (side === "team" ? "Write to " + esc(((client(cid) || {}).name || "").split(" ")[0] || "the owner") : "Write a message") + '">' + esc(c.text) + '</textarea><button class="btn primary" type="button" data-act="cmp-send"' + (c.busy ? " disabled" : "") + ">" + (c.busy ? "Sending…" : "Send") + "</button></div></div>";
 }
 function threadView(cid, side) {
   const cl = client(cid) || {}; const msgs = threadMsgs(cid); let h = "";
@@ -2094,7 +2143,9 @@ function viewPortal() {
   h += '<div class="card"><h3 style="margin-bottom:8px">Report cards</h3><div class="list">' + (past.length ? past.map(b => { const s = svcById(b.serviceId) || {}; const r = b.report; return '<div class="li"><span class="cat ' + b.cat + '"></span><div class="grow"><strong>' + esc(s.name || "") + '</strong><div class="small muted">' + esc(when(b)) + " · " + esc(petNames(b)) + "</div></div>" + (r ? '<div class="report"><div class="row" style="justify-content:space-between"><strong>Mood: ' + esc(r.mood) + '</strong><span class="small muted">' + esc(staffName(r.staffId)) + '</span></div><div class="ticks">' + (r.ticks || []).map(x => '<span class="tick">' + esc(x) + "</span>").join("") + "</div><p>" + esc(r.note) + "</p></div>" : "") + "</div>"; }).join("") : '<div class="empty">Report cards appear here after each visit.</div>') + "</div></div>";
   h += '</div><div class="stack"><div class="card"><div class="row" style="justify-content:space-between"><h3>Balance</h3>' + (due > 0 ? '<span class="pill unpaid num">' + money(due) + " due</span>" : '<span class="pill paid">All paid</span>') + '</div>' + (due > 0 && cardsOn() ? '<div class="stack" style="margin-top:10px"><button class="btn primary" data-act="pay-balance">Pay ' + money(due) + ' by card</button><span class="small muted">You\'ll pay on Stripe\'s secure page.</span></div>' : due > 0 && linksOn() && stripeCfg().payLink ? '<div class="stack" style="margin-top:10px"><a class="btn primary" href="' + esc(stripeUrl(stripeCfg().payLink, me, "bal-" + me.id)) + '" target="_blank" rel="noopener">Pay ' + money(due) + ' by card</a><span class="small muted">Enter ' + money(due) + ' on Stripe\'s secure page.</span></div>' : "") + '<div class="list" style="margin-top:8px">' + (past.length ? past.slice(0, 8).map(b => '<div class="li"><div class="grow small">' + esc(fmtDate(b.date)) + " · " + esc((svcById(b.serviceId) || {}).name || "") + '</div><span class="num">' + money(b.price) + '</span><span class="pill ' + (b.paid ? "paid" : "unpaid") + '">' + (b.paid ? "Paid" : "Unpaid") + "</span>" + (b.paid ? "" : '<div class="report small">' + linesFor(b).map(l => '<div class="row" style="justify-content:space-between;flex-wrap:nowrap;gap:12px"><span>' + esc(l.deposit ? "Deposit paid by card" : l.adjust ? "Adjustment to agreed price" : (l.pet + (l.size ? " (" + SIZE_NAME[l.size] + ")" : ""))) + (l.adjust || l.deposit ? "" : ", " + esc(l.qty) + " " + esc(l.unit + (l.qty === 1 ? "" : "s")) + " × " + money(l.unitPrice)) + '</span><span class="num">' + money(l.amount) + "</span></div>").join("") + "</div>") + "</div>").join("") : '<p class="muted small">No invoices yet.</p>') + "</div></div>";
   h += '<div class="card"><h3>Your prices</h3><p class="small muted" style="margin:4px 0 8px">Per dog. These are the prices you pay when you book while signed in.</p><div class="list">' + C().services.map(sv => { const mine = clientSvc(sv, me); return '<div class="li" style="padding:8px 0"><span class="cat ' + sv.cat + '"></span><div class="grow small">' + esc(sv.name) + '</div><span class="num small">' + priceText(mine).replace(/<\/?small>/g, "") + "</span>" + (mine.custom ? '<span class="pill ok">Your rate</span>' : "") + "</div>"; }).join("") + "</div></div>";
-  h += '<div class="card"><div class="row" style="justify-content:space-between"><h3>My dogs</h3><button class="btn sm" data-act="pet-new" data-client="' + esc(me.id) + '">Add a dog</button></div><div class="stack" style="margin-top:10px">' + (pets.length ? pets.map(p => petCard(p, t, false)).join("") : '<p class="muted small">No dogs yet.</p>') + "</div></div></div></div></div>";
+  h += '<div class="card"><div class="row" style="justify-content:space-between"><h3>My dogs</h3><button class="btn sm" data-act="pet-new" data-client="' + esc(me.id) + '">Add a dog</button></div><div class="stack" style="margin-top:10px">' + (pets.length ? pets.map(p => petCard(p, t, false)).join("") : '<p class="muted small">No dogs yet.</p>') + "</div></div>" +
+    '<div class="card stack"><h3>Your account</h3><p class="small muted">Signed in as ' + esc(me.email || "") + '.</p><div class="row"><button class="btn" data-act="signout">Sign out</button><button class="btn ghost danger" data-act="delete-account">Delete my account</button></div></div>' +
+    "</div></div></div>";
   return h;
 }
 function vaxPills(p, onDate) {
@@ -2602,6 +2653,14 @@ async function handleClick(e) {
     case "contact-again": S.contactSent = ""; render(); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); const roles = Object.assign({}, t.roles || {}); delete roles[id]; try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids, roles })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "staff-signout": S.moreOpen = false; ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
+    case "delete-account": {
+      const me = client(S.me); if (!me) break;
+      if (!confirm("Delete your account? We'll remove your account, your dogs' details and your booking history within 7 days. Anything you still owe stays on our accounts as the law requires. This can't be undone.")) break;
+      const rec = { name: String(me.name || "Customer").slice(0, 80), email: String(me.email || (S.authUser && S.authUser.email) || "unknown@example.com").slice(0, 120), phone: String(me.phone || "").slice(0, 30), message: "ACCOUNT DELETION REQUEST. Please delete this customer's account and data. Customer record: " + me.id + ".", at: new Date().toISOString(), status: "new" };
+      try { if (S.mode === "live") await db.collection("enquiries").doc("del-" + me.id + "-" + Date.now().toString(36)).set(rec); else S.enquiries.push(Object.assign({ id: "del-" + me.id }, rec)); }
+      catch (e) { toast("Couldn't send that. Check your connection and try again."); break; }
+      ssoSignOut(); S.me = null; remember(); navTo("home"); render(); toast("Thanks. Your account will be deleted within 7 days."); break;
+    }
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "admin-more": S.moreOpen = !S.moreOpen; render(); break;
