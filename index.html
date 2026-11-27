@@ -626,6 +626,48 @@ a,button,label,select,input,textarea,[role=button]{touch-action:manipulation}
 .btn.icon-only svg.bi{width:19px;height:19px}
 @media (pointer:coarse), (max-width:640px){ body .btn.icon-only,body .btn.icon-only.sm{width:44px;min-width:44px;height:44px;min-height:44px;box-sizing:border-box} }
 .btn.danger.icon-only,.btn.ghost.danger.icon-only{color:var(--bad)}
+/* ===== No visible scroll bars; smooth, app-like scrolling ===== */
+*{scrollbar-width:none}
+*::-webkit-scrollbar{display:none;width:0;height:0}
+html{scroll-behavior:smooth}
+.subnav,.meet-days,.tbl-wrap,.filters,.chips,.week,.kennel-wrap,.wstrip{-webkit-overflow-scrolling:touch;overscroll-behavior-x:contain}
+.subnav,.meet-days{scroll-snap-type:x proximity}
+.subnav > *,.meet-days > *{scroll-snap-align:start}
+@media (max-width:860px){
+  .subnav,.meet-days{-webkit-mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent);mask-image:linear-gradient(to right,#000 calc(100% - 28px),transparent)}
+}
+/* Diary: segmented control, compact date nav, all 7 days visible on desktop */
+.diary-bar{display:flex;flex-wrap:wrap;justify-content:space-between;align-items:center;gap:10px}
+.seg{display:inline-grid;grid-auto-flow:column;grid-auto-columns:1fr;gap:2px;background:var(--surface-2);border-radius:12px;padding:3px}
+.seg-b{all:unset;box-sizing:border-box;cursor:pointer;text-align:center;font-weight:600;font-size:.9rem;padding:7px 16px;border-radius:9px;color:var(--muted);min-height:36px;display:flex;align-items:center;justify-content:center}
+.seg-b.on{background:var(--surface);color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.12)}
+.seg-b:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.dnav{display:flex;gap:6px;align-items:center}
+.week{grid-template-columns:repeat(7,minmax(0,1fr));overflow:visible}
+.week .chip{font-size:.8rem}
+.wk-m{display:none}
+@media (max-width:640px){
+  .diary-bar{flex-direction:column;align-items:stretch}
+  .seg{display:grid;width:100%}
+  .seg-b{min-height:40px}
+  .dnav{justify-content:space-between}
+  .dnav .btn:not(.icon-only){flex:1}
+  .week{display:none}
+  .wk-m{display:flex;flex-direction:column;gap:12px}
+  .wstrip{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:4px;touch-action:pan-y}
+  .wd{all:unset;box-sizing:border-box;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;padding:8px 0 6px;border-radius:14px;min-height:64px;color:var(--ink)}
+  .wd .wdn{font-size:.72rem;color:var(--muted);font-weight:600}
+  .wd strong{font-size:1.1rem;width:34px;height:34px;display:grid;place-items:center;border-radius:50%}
+  .wd .wdc{font-size:.7rem;font-weight:700;color:var(--accent);min-height:14px}
+  .wd.today strong{color:var(--accent)}
+  .wd.on strong{background:var(--accent);color:#fff}
+  .wd.closed{opacity:.5}
+  .wd:focus-visible{outline:2px solid var(--accent);outline-offset:1px}
+  .wlist{display:flex;flex-direction:column;gap:8px;min-height:200px;touch-action:pan-y}
+  .wlist h3{font-size:1.05rem}
+  .wlist .chip{font-size:.95rem;padding:10px 12px}
+  .month{touch-action:pan-y}
+}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
@@ -1401,7 +1443,7 @@ function view() {
   const h = USE_PATHS ? location.pathname.replace(/^\/+|\/+$/g, "") : location.hash.slice(1);
   return ROUTES.includes(h) ? h : "home";
 }
-function routeChanged() { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; S.modal = null; S.moreOpen = false; window.scrollTo(0, 0); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); }
+function routeChanged() { S.navCount = (S.navCount || 1) + 1; if (view() !== "book") S.done = null; S.modal = null; S.moreOpen = false; window.scrollTo({ top: 0, behavior: "instant" }); render(); if (view() === "messages" && S.me) markRead(S.me, "client"); }
 function navTo(v) {
   if (!USE_PATHS) { location.hash = v; return; }
   const path = v === "home" ? "/" : "/" + v;
@@ -1546,6 +1588,25 @@ function decorateIcons(root) {
   (root || document).querySelectorAll(".top a, .btn").forEach(el => { if (el.dataset.ic || el.childElementCount) return; const t = el.textContent.trim(); if (/^← /.test(t)) { el.dataset.ic = "1"; el.innerHTML = lucide("left") + esc(t.slice(2)); } });
 }
 function render() { renderView(); fixLinks(); decorateIcons(); }
+// Swipe left/right on the Diary to move between days, weeks and months
+(function () {
+  let sw = null;
+  document.addEventListener("touchstart", e => { const el = e.target.closest && e.target.closest("[data-swipe]"); sw = el ? { x: e.touches[0].clientX, y: e.touches[0].clientY, kind: el.dataset.swipe } : null; }, { passive: true });
+  document.addEventListener("touchend", e => {
+    if (!sw) return; const dx = e.changedTouches[0].clientX - sw.x, dy = e.changedTouches[0].clientY - sw.y; const kind = sw.kind; sw = null;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5) return;
+    const dir = dx < 0 ? 1 : -1; const t = todayISO();
+    if (kind === "week") { S.weekStart = addDays(S.weekStart || t, 7 * dir); S.diaryWDay = null; }
+    else if (kind === "day") {
+      const start = S.weekStart || t; const cur = S.diaryWDay || (t >= start && t <= addDays(start, 6) ? t : start); const next = addDays(cur, dir);
+      if (next < start || next > addDays(start, 6)) S.weekStart = addDays(start, 7 * dir);
+      S.diaryWDay = next;
+    }
+    else if (kind === "month") { S.monthStart = addMonths(S.monthStart || monthOf(t), dir); S.diaryDay = null; }
+    else return;
+    render();
+  }, { passive: true });
+})();
 function renderView() {
   const v = view(); const c = C();
   document.title = c.businessName + " Platform";
@@ -2072,7 +2133,7 @@ async function submitBooking() {
     S.me = cid; remember();
     S.done = { svc: svc.name, pets: pets.map(p => p.name).join(" & "), date: d.date, count: reps, status, cat: svc.cat, ref: firstRef, clientId: cid };
     S.draft = { repeat: 1 }; S.errors = [];
-    render(); window.scrollTo(0, 0);
+    render(); window.scrollTo({ top: 0, behavior: "instant" });
   } catch (e) { /* toast already shown */ }
 }
 function remember() { try { if (S.me) sessionStorage.setItem("dogco-me", S.me); else sessionStorage.removeItem("dogco-me"); } catch (e) {} }
@@ -2448,26 +2509,30 @@ function adminSchedule() {
   } else {
     const start = S.weekStart || t;
     days = [0, 1, 2, 3, 4, 5, 6].map(i => addDays(start, i));
-    title = "Seven days from " + fmtDate(start, { day: "numeric", month: "long" }).replace(/ /g, " ");
+    title = fmtDate(start, { day: "numeric", month: "short" }).replace(/ /g, " ") + " to " + fmtDate(addDays(start, 6), { day: "numeric", month: "short" }).replace(/ /g, " ");
     nav = '<button class="btn sm" data-act="week" data-id="-7">← Previous</button><button class="btn sm" data-act="week" data-id="0">This week</button><button class="btn sm" data-act="week" data-id="7">Next →</button>';
   }
   const inRange = b => days.some(d => onDay(b, d));
   const pending = S.bookings.filter(b => b.status === "requested" && inRange(b)).length;
   const count = live.filter(inRange).length;
   const modes = [["week", "Week"], ["month", "Month"], ["custom", "Custom"]];
-  let h = '<div class="head"><div><h2>Schedule</h2><p class="muted">' + esc(title) + ". " + count + " booking" + (count === 1 ? "" : "s") + ". Only approved bookings appear here." + (pending ? ' <button class="btn sm sun" data-act="tab" data-id="approvals">' + pending + " waiting for approval</button>" : "") + '</p></div><div class="row">' + nav + "</div></div>";
-  h += '<div class="row diary-bar"><div class="seg" role="group" aria-label="Diary view">' + modes.map(([k, l]) => '<button class="btn sm' + (mode === k ? " primary" : "") + '" data-act="diary-mode" data-id="' + k + '" aria-pressed="' + (mode === k) + '">' + l + "</button>").join("") + "</div>";
+  let h = '<div class="head"><div><h2>Schedule</h2><p class="muted">' + esc(title) + ". " + count + " booking" + (count === 1 ? "" : "s") + ". Only approved bookings appear here." + (pending ? ' <button class="btn sm sun" data-act="tab" data-id="approvals">' + pending + " waiting for approval</button>" : "") + "</p></div></div>";
+  h += '<div class="diary-bar"><div class="seg" role="group" aria-label="Diary view">' + modes.map(([k, l]) => '<button type="button" class="seg-b' + (mode === k ? " on" : "") + '" data-act="diary-mode" data-id="' + k + '" aria-pressed="' + (mode === k) + '">' + l + "</button>").join("") + "</div>" + (nav ? '<div class="dnav">' + nav + "</div>" : "");
   if (mode === "custom") h += '<form class="row range-form" data-form="diary-range"><label class="small" for="dr-from">From</label><input type="date" id="dr-from" name="from" required value="' + esc(S.rangeFrom || t) + '"><label class="small" for="dr-to">To</label><input type="date" id="dr-to" name="to" required value="' + esc(S.rangeTo || addDays(t, 13)) + '"><button class="btn sm primary" type="submit">Show</button></form>';
   h += "</div>";
   h += '<div class="row small">' + Object.keys(CAT_LABEL).map(k => '<span class="row" style="gap:5px"><span class="cat ' + k + '"></span>' + CAT_LABEL[k] + "</span>").join("") + "</div>";
   if (mode === "week") {
     h += '<div class="week">' + days.map(d => { const items = itemsOn(d); const closed = closedOn(d); return '<div class="day' + (d === t ? " today" : "") + (closed ? " closed" : "") + '"><h4><span>' + esc(fmtDate(d, { weekday: "short", day: "numeric" })) + '</span><span class="muted num">' + (closed ? "Closed" : items.length) + "</span></h4>" + (items.map(b => diaryChip(b, d)).join("") || '<span class="small muted">Nothing booked</span>') + "</div>"; }).join("") + "</div>";
+    const sel = days.includes(S.diaryWDay) ? S.diaryWDay : (days.includes(t) ? t : days[0]);
+    const selItems = itemsOn(sel);
+    h += '<div class="wk-m"><div class="wstrip" role="tablist" aria-label="Days" data-swipe="week">' + days.map(d => { const n = itemsOn(d).length; return '<button type="button" role="tab" class="wd' + (d === sel ? " on" : "") + (d === t ? " today" : "") + (closedOn(d) ? " closed" : "") + '" data-act="diary-wday" data-id="' + d + '" aria-selected="' + (d === sel) + '" aria-label="' + esc(fmtDate(d, { weekday: "long", day: "numeric", month: "long" }).replace(/\u00A0/g, " ")) + ", " + (closedOn(d) ? "closed" : n + " bookings") + '"><span class="wdn">' + esc(fmtDate(d, { weekday: "short" }).slice(0, 3)) + '</span><strong>' + parse(d).getDate() + '</strong><span class="wdc">' + (closedOn(d) ? "–" : n ? n : "") + "</span></button>"; }).join("") + "</div>" +
+      '<div class="wlist" data-swipe="day"><h3>' + esc(fmtDate(sel, { weekday: "long", day: "numeric", month: "long" }).replace(/\u00A0/g, " ")) + ' <span class="muted small">' + (closedOn(sel) ? "Closed" : selItems.length + " booking" + (selItems.length === 1 ? "" : "s")) + "</span></h3>" + (selItems.map(b => diaryChip(b, sel)).join("") || '<div class="empty small">Nothing booked. Swipe for other days.</div>') + "</div></div>";
   } else if (mode === "month") {
     const lead = (parse(days[0]).getDay() + 6) % 7; // Monday first
     const cells = Array(lead).fill(null).concat(days);
     while (cells.length % 7) cells.push(null);
     const sel = S.diaryDay && days.includes(S.diaryDay) ? S.diaryDay : null;
-    h += '<div class="month" role="grid" aria-label="' + esc(title) + '">' + ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(w => '<div class="mhead" role="columnheader">' + w + "</div>").join("") +
+    h += '<div class="month" data-swipe="month" role="grid" aria-label="' + esc(title) + '">' + ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"].map(w => '<div class="mhead" role="columnheader">' + w + "</div>").join("") +
       cells.map(d => { if (!d) return '<div class="mcell blank"></div>'; const items = itemsOn(d); const closed = closedOn(d); const cats = [...new Set(items.map(b => b.cat))];
         return '<button class="mcell' + (d === t ? " today" : "") + (closed ? " closed" : "") + (d === sel ? " sel" : "") + '" data-act="diary-day" data-id="' + d + '" aria-label="' + esc(fmtDate(d, { weekday: "long", day: "numeric", month: "long" }).replace(/ /g, " ")) + ", " + (closed ? "closed" : items.length + " bookings") + '"><span class="mtop"><span class="mnum">' + parse(d).getDate() + "</span>" + (items.length ? '<span class="mcount num">' + items.length + "</span>" : closed ? '<span class="small muted">Closed</span>' : "") + "</span>" +
           '<span class="mlist">' + items.slice(0, 3).map(b => '<span class="mchip ' + b.cat + '">' + esc(petNames(b)) + "</span>").join("") + (items.length > 3 ? '<span class="small muted">+' + (items.length - 3) + " more</span>" : "") + "</span>" +
@@ -2677,7 +2742,7 @@ async function handleClick(e) {
     case "submit-booking": await submitBooking(); break;
     case "sso": await ssoSignIn(id); break;
     case "auth-tab": S.portalTab = id; S.portalErr = ""; render(); { const f = document.querySelector(id === "signup" ? "#su-name" : "#si-email"); if (f) f.focus(); } break;
-    case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo(0, 0); break;
+    case "view-mode": navTo(id === "admin" ? "admin" : (S.lastCustView || "home")); window.scrollTo({ top: 0, behavior: "instant" }); break;
     case "xero-export": case "xero-client": {
       const again = act === "xero-client" ? true : !!(document.getElementById("xero-again") || {}).checked; const out = xeroExport(again, act === "xero-client" ? id : null);
       if (!out.rows.length) { toast("Nothing to export."); break; }
@@ -2728,7 +2793,7 @@ async function handleClick(e) {
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
     case "admin-more": S.moreOpen = !S.moreOpen; render(); break;
     case "admin-site": S.moreOpen = false; navTo("home"); render(); break;
-    case "tab": S.moreOpen = false; S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo(0, 0); break;
+    case "tab": S.moreOpen = false; S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo({ top: 0, behavior: "instant" }); break;
     case "bfilter": S.bFilter = id; render(); break;
     case "approve": await patchBooking(id, { status: "confirmed" }); toast("Confirmed"); break;
     case "decline": await patchBooking(id, { status: "declined" }); toast("Declined"); break;
@@ -2749,7 +2814,7 @@ async function handleClick(e) {
     case "dayoff-add": { const inp = document.getElementById("s-dayoff"); const hid = document.getElementById("s-daysoff"); if (!inp || !hid || !inp.value) break; const list = new Set(hid.value ? hid.value.split(",") : []); list.add(inp.value); hid.value = [...list].sort().join(","); drawDaysOff(); inp.value = ""; break; }
     case "dayoff-rm": { const hid = document.getElementById("s-daysoff"); if (!hid) break; hid.value = hid.value.split(",").filter(x => x && x !== id).join(","); drawDaysOff(); break; }
     case "addon-new": S.newAddons = (S.newAddons || []).concat([{ id: "a-" + Date.now().toString(36), name: "New add-on", desc: "", price: 0, per: "dog", services: [], active: true }]); render(); break;
-    case "msg-to": { const cid = el.dataset.client; S.adminTab = "messages"; S.thread = cid; S.cmp = { key: "team:" + cid, text: "", photos: [], pets: (el.dataset.pets || "").split(",").filter(Boolean), err: "" }; if (location.hash !== "#admin") navTo("admin"); render(); window.scrollTo(0, 0); markRead(cid, "team"); break; }
+    case "msg-to": { const cid = el.dataset.client; S.adminTab = "messages"; S.thread = cid; S.cmp = { key: "team:" + cid, text: "", photos: [], pets: (el.dataset.pets || "").split(",").filter(Boolean), err: "" }; if (location.hash !== "#admin") navTo("admin"); render(); window.scrollTo({ top: 0, behavior: "instant" }); markRead(cid, "team"); break; }
     case "thread": openThread(id); break;
     case "thread-close": S.thread = null; render(); break;
     case "cmp-send": await sendMessage(); break;
@@ -2761,13 +2826,14 @@ async function handleClick(e) {
     case "csv-all": { const ids = [...new Set(S.bookings.filter(b => b.status === "completed" && !b.paid).map(b => b.clientId))]; await saveCSV("unpaid-invoice-lines-" + todayISO() + ".csv", invoiceRows(ids)); break; }
     case "prices-clear": { const cl = client(id); S.modal = null; if (cl) { await put("clients", Object.assign({}, cl, { prices: {} })); toast(cl.name + " now pays standard prices"); } break; }
     case "decline-open": S.modal = { type: "decline", id }; render(); break;
-    case "csel-go": S.cSel = id; S.adminTab = "clients"; render(); window.scrollTo(0, 0); break;
+    case "csel-go": S.cSel = id; S.adminTab = "clients"; render(); window.scrollTo({ top: 0, behavior: "instant" }); break;
     case "client-approve": { const cl = client(id); if (cl) { await put("clients", Object.assign({}, cl, { approved: true })); toast(cl.name + " approved"); } break; }
     case "approve-clean": { const list = S.bookings.filter(b => b.status === "requested" && !approvalChecks(b).some(x => x.lvl !== "ok")); for (const b of list) await patchBooking(b.id, { status: "confirmed", staffId: b.staffId || defaultStaff(C(), b.cat).id, decision: { by: "Bulk approval", at: new Date().toISOString(), message: "" } }); toast(list.length + " approved and added to the diary"); break; }
     case "diary-mode": S.diaryMode = id; render(); break;
     case "month": S.monthStart = id === "0" ? null : addMonths(S.monthStart || monthOf(todayISO()), Number(id)); S.diaryDay = null; render(); break;
     case "diary-day": S.diaryDay = S.diaryDay === id ? null : id; render(); break;
-    case "week": S.weekStart = id === "0" ? null : addDays(S.weekStart || todayISO(), Number(id)); render(); break;
+    case "week": S.weekStart = id === "0" ? null : addDays(S.weekStart || todayISO(), Number(id)); S.diaryWDay = null; render(); break;
+    case "diary-wday": S.diaryWDay = id; render(); break;
     case "csel": S.cSel = id; S.cAll = false; addRecent(id); render(); { const d = document.querySelector(".cdetail"); if (d && d.getBoundingClientRect().top > window.innerHeight * 0.6) d.scrollIntoView({ behavior: "smooth", block: "start" }); } break;
     case "c-all": S.cAll = !S.cAll; render(); break;
     case "client-new": S.modal = { type: "client" }; render(); break;
@@ -2926,7 +2992,7 @@ async function handleSubmit(e) {
         callFn("meetToCalendar", { id: m.id }).catch(() => {});
       } else { S.meetings.push(m); }
     } catch (er) { S.meet = Object.assign({}, st, { err: "Couldn't book that. Check your connection and try again." }); render(); return; }
-    S.meet = { done: m }; forget(e.target); render(); window.scrollTo(0, 0); return;
+    S.meet = { done: m }; forget(e.target); render(); window.scrollTo({ top: 0, behavior: "instant" }); return;
   }
   if (kind === "contact") {
     if (String(fd.get("website") || "")) { S.contactSent = "there"; render(); return; }
