@@ -619,6 +619,13 @@ a,button,label,select,input,textarea,[role=button]{touch-action:manipulation}
   .crow .iconbtn{width:40px;height:40px}
   .toast{bottom:calc(84px + env(safe-area-inset-bottom));max-width:calc(100% - 32px);text-align:center}
 }
+.btn svg.bi,.linkbtn svg.bi,.backlink svg.bi,.top a svg.bi{width:18px;height:18px;flex:none}
+.linkbtn:has(svg.bi){display:inline-flex;align-items:center;gap:6px}
+.btn.icon-only{width:40px;min-width:40px;height:40px;min-height:40px;box-sizing:border-box;padding:0;gap:0;flex:none!important}
+.btn.icon-only.sm{width:36px;min-width:36px;height:36px;min-height:36px}
+.btn.icon-only svg.bi{width:19px;height:19px}
+@media (pointer:coarse), (max-width:640px){ body .btn.icon-only,body .btn.icon-only.sm{width:44px;min-width:44px;height:44px;min-height:44px;box-sizing:border-box} }
+.btn.danger.icon-only,.btn.ghost.danger.icon-only{color:var(--bad)}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
@@ -1482,7 +1489,63 @@ const DIRTY = { ids: new Set(), key: "" };
 document.addEventListener("input", e => { const t = e.target; if (t && t.id && !t.dataset.d && !t.dataset.q && t.type !== "file") DIRTY.ids.add(t.id); });
 document.addEventListener("change", e => { const t = e.target; if (t && t.id && (t.type === "checkbox" || t.type === "radio") && !t.dataset.d) DIRTY.ids.add(t.id); });
 function forget(form) { if (form && form.elements) [...form.elements].forEach(el => el.id && DIRTY.ids.delete(el.id)); }
-function render() { renderView(); fixLinks(); }
+// ===== Icons: one set (Lucide, MIT), applied by button name so every screen matches =====
+const LUCIDE = {
+  phone: '<path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72 12.84 12.84 0 0 0 .7 2.81 2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45 12.84 12.84 0 0 0 2.81.7A2 2 0 0 1 22 16.92z"/>',
+  mail: '<rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/>',
+  message: '<path d="M7.9 20A9 9 0 1 0 4 16.1L2 22Z"/>',
+  pencil: '<path d="M21.17 6.81a1 1 0 0 0-3.99-3.99L3.84 16.17a2 2 0 0 0-.5.83l-1.32 4.35a.5.5 0 0 0 .62.62l4.35-1.32a2 2 0 0 0 .83-.5z"/><path d="m15 5 4 4"/>',
+  trash: '<path d="M3 6h18"/><path d="M19 6v14c0 1-1 2-2 2H7c-1 0-2-1-2-2V6"/><path d="M8 6V4c0-1 1-2 2-2h4c1 0 2 1 2 2v2"/><path d="M10 11v6"/><path d="M14 11v6"/>',
+  left: '<path d="m15 18-6-6 6-6"/>',
+  right: '<path d="m9 18 6-6-6-6"/>',
+  calplus: '<path d="M8 2v4"/><path d="M16 2v4"/><path d="M21 13V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h8"/><path d="M3 10h18"/><path d="M16 19h6"/><path d="M19 16v6"/>',
+  refresh: '<path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/>',
+  plus: '<path d="M5 12h14"/><path d="M12 5v14"/>',
+  userplus: '<path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M19 8v6"/><path d="M22 11h-6"/>',
+  handshake: '<path d="m11 17 2 2a1 1 0 1 0 3-3"/><path d="m14 14 2.5 2.5a1 1 0 1 0 3-3l-3.88-3.88a3 3 0 0 0-4.24 0l-.88.88a1 1 0 1 1-3-3l2.81-2.81a5.79 5.79 0 0 1 7.06-.87l.47.28a2 2 0 0 0 1.42.25L21 4"/><path d="m21 3 1 11h-2"/><path d="M3 3 2 14l6.5 6.5a1 1 0 1 0 3-3"/><path d="M3 4h8"/>',
+  send: '<path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z"/><path d="m21.854 2.147-10.94 10.939"/>',
+  check: '<path d="M20 6 9 17l-5-5"/>',
+  x: '<path d="M18 6 6 18"/><path d="m6 6 12 12"/>',
+  play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  login: '<path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><path d="m10 17 5-5-5-5"/><path d="M15 12H3"/>',
+  logout: '<path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><path d="m16 17 5-5-5-5"/><path d="M21 12H9"/>',
+  done: '<circle cx="12" cy="12" r="10"/><path d="m9 12 2 2 4-4"/>',
+  camera: '<path d="M14.5 4h-5L7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2h-3l-2.5-3z"/><circle cx="12" cy="13" r="3"/>',
+  pound: '<path d="M18 7c0-5.333-8-5.333-8 0"/><path d="M10 7v14"/><path d="M6 21h12"/><path d="M6 13h10"/>',
+  upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
+  download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
+  card: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
+  textsize: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>'
+};
+function lucide(name, cls) { return '<svg class="' + (cls || "bi") + '" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (LUCIDE[name] || "") + "</svg>"; }
+// Universal actions in tight rows: icon only, name kept for screen readers and as a tooltip
+const ICON_ONLY = { "Call": "phone", "Email": "mail", "Message": "message", "Edit": "pencil", "Delete": "trash", "Remove": "trash", "← Previous": "left", "Next →": "right", "Add to calendar": "calplus", "Refresh": "refresh" };
+// Main actions: icon plus label
+const ICON_LABEL = {
+  "New booking": "plus", "Add booking": "plus", "Add customer": "userplus", "Add a dog": "plus", "New add-on": "plus", "Add day off": "plus", "Add": "plus",
+  "Book now": "calplus", "Book a service": "calplus", "Book again": "calplus", "Book something else": "calplus", "Add to my calendar": "calplus",
+  "Book a Meet & Greet": "handshake", "Book Meet & Greet": "handshake",
+  "Send message": "send", "Send": "send", "Reply": "send", "Send next": "send", "Reply by email": "mail", "Message us": "message", "Messages": "message",
+  "Approve": "check", "Approve client": "check", "Approve and add to diary": "check", "Decline": "x", "Decline request": "x",
+  "Check in": "login", "Check out": "logout", "Start": "play", "Complete": "done", "Complete and send": "done", "Mark done": "done", "Mark answered": "done",
+  "Send update": "camera", "Mark visit paid": "pound", "Mark all paid": "pound",
+  "Send all to Xero": "upload", "Send to Xero": "upload", "Send again": "upload", "Download Xero invoices file": "download", "Install": "download",
+  "Sign out": "logout", "Sign in": "login", "Sign in or create account": "login", "Delete my account": "trash", "Display options": "textsize"
+};
+function decorateIcons(root) {
+  (root || document).querySelectorAll(".btn, .linkbtn").forEach(el => {
+    if (el.dataset.ic || el.childElementCount) return;
+    const t = el.textContent.replace(/\s+/g, " ").trim(); if (!t) return;
+    let name = ICON_ONLY[t];
+    if (name) { el.dataset.ic = "1"; el.classList.add("icon-only"); el.title = t.replace(/[←→]/g, "").trim(); el.innerHTML = lucide(name) + '<span class="vh">' + esc(el.title) + "</span>"; return; }
+    name = ICON_LABEL[t] || (/^Approve \d/.test(t) ? "check" : /^Pay /.test(t) ? "card" : null);
+    if (name) { el.dataset.ic = "1"; el.insertAdjacentHTML("afterbegin", lucide(name)); }
+  });
+  // back links and the header's View site link use a chevron instead of an arrow
+  (root || document).querySelectorAll(".backlink > span[aria-hidden]").forEach(sp => { if (sp.textContent.trim() === "←") sp.outerHTML = lucide("left"); });
+  (root || document).querySelectorAll(".top a, .btn").forEach(el => { if (el.dataset.ic || el.childElementCount) return; const t = el.textContent.trim(); if (/^← /.test(t)) { el.dataset.ic = "1"; el.innerHTML = lucide("left") + esc(t.slice(2)); } });
+}
+function render() { renderView(); fixLinks(); decorateIcons(); }
 function renderView() {
   const v = view(); const c = C();
   document.title = c.businessName + " Platform";
