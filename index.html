@@ -1642,7 +1642,6 @@ function renderView() {
   let html = '<header class="top"><div class="wrap"><a class="brand" href="#home">' + LOGO + "<span>" + esc(c.businessName) + '</span></a>' + modeSw + (nav.length ? '<nav class="nav" aria-label="Main">' : '<nav class="nav" hidden>') +
     nav.map(([k, l]) => '<a href="#' + k + '"' + (k === "admin" ? ' class="admin-link"' : "") + (v === k ? ' aria-current="page"' : "") + ">" + (NAV_IC[k] || "") + "<span>" + l + (k === "portal" && S.me && unreadForClient(S.me) ? ' <span class="nbadge num" aria-label="unread">' + unreadForClient(S.me) + "</span>" : "") + (k === "admin" && needsYou() && !isQuiet() ? ' <span class="nbadge num" aria-label="needs you">' + needsYou() + "</span>" : "") + "</span></a>").join("") + "</nav></div></header>";
   html += appBanners(v);
-  if (S.mode === "demo") html += '<div class="banner"><div class="wrap"><strong>Demo mode.</strong> Sample data, and changes last until you reload. ' + (IS_PWA_BUILD ? "Connect the database (firebase-config.js) to save real bookings." : "Open the published page signed in to save real bookings.") + "</div></div>";
   if (S.netNote) html += '<div class="banner"><div class="wrap">' + esc(S.netNote) + "</div></div>";
   if (S.mode === "loading") html += '<div class="wrap" style="padding:60px 20px"><p class="muted">Loading bookings…</p></div>';
   else if (v === "home") html += viewHome();
