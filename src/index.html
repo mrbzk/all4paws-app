@@ -2062,7 +2062,7 @@ async function loadGoogleStatus() {
 }
 function sideMini() { try { return localStorage.getItem("dogco-side-mini") === "1"; } catch (e) { return !!S.sideMini; } }
 // Photos and brand: the logo and website photos, replaceable from Settings > Business
-const BRAND_SLOTS = [["logo", "Logo", "Top of every page. Square works best.", "img/logo-160.png"], ["about", "About us photo", "The big photo on the About us page.", "img/nicole.jpg"]];
+const BRAND_SLOTS = [["logo", "Logo", "Top of every page, shown in a circle. Best size: 512 x 512 px square, PNG with a transparent or plain background, logo kept away from the corners.", "img/logo-160.png"], ["about", "About us photo", "The big photo on the About us page, shown square. Best size: 1200 x 1200 px (at least 800 x 800), JPG, with the subject in the middle.", "img/nicole.jpg"]];
 const GALLERY_KEYS = ["g1", "g2", "g3", "g4", "g5", "g6"];
 // Homepage photos: up to 6, in order. Until changed, the original six photos are used.
 function galleryKeys() { const g = C().gallery; return Array.isArray(g) ? g.filter(k => GALLERY_KEYS.includes(k)).slice(0, 6) : GALLERY_KEYS.slice(); }
@@ -2073,7 +2073,7 @@ function brandCard(sec) {
   const items = galleryItems();
   const gal = items.map((g, i) => '<div class="gtile"><img src="' + esc(g.src) + '" alt="' + esc("Homepage photo " + (i + 1)) + '" loading="lazy"><div class="gacts"><label class="btn sm"><input type="file" class="vh" accept="image/*" data-brand="' + g.key + '">Replace</label><button type="button" class="btn sm ghost danger" data-act="gallery-del" data-id="' + g.key + '">Delete</button></div></div>').join("") +
     (items.length < 6 ? '<label class="gtile gadd"><input type="file" class="vh" accept="image/*" data-brand="add">' + lucide("plus") + "<span>Add photo</span></label>" : "");
-  return '<section class="card stack" data-sec="business"' + (sec === "business" ? "" : " hidden") + '><div><h3>Photos and brand</h3><p class="small muted">The logo and photos customers see on the website. Pick a new picture to replace one straight away. Large photos are made smaller automatically.</p></div><div class="bgrid">' + BRAND_SLOTS.map(slot).join("") + '</div><div><h3 style="font-size:1rem">Homepage photos <span class="muted small">' + items.length + ' of 6</span></h3><p class="small muted">Shown beside the headline on the homepage. The layout adjusts to how many there are' + (items.length ? "" : ", and with none the headline uses the full width") + '.</p></div><div class="ggrid">' + gal + "</div></section>";
+  return '<section class="card stack" data-sec="business"' + (sec === "business" ? "" : " hidden") + '><div><h3>Photos and brand</h3><p class="small muted">The logo and photos customers see on the website. Pick a new picture to replace one straight away. Large photos are made smaller automatically.</p></div><div class="bgrid">' + BRAND_SLOTS.map(slot).join("") + '</div><div><h3 style="font-size:1rem">Homepage photos <span class="muted small">' + items.length + ' of 6</span></h3><p class="small muted">Shown beside the headline on the homepage. The layout adjusts to how many there are' + (items.length ? "" : ", and with none the headline uses the full width") + '. Best size: 1200 x 1200 px square (at least 800 x 800), JPG. With 1, 2 or 5 photos some are trimmed to a slightly wider or taller shape, so keep the dog in the middle.</p></div><div class="ggrid">' + gal + "</div></section>";
 }
 function brandImage(file, isLogo) {
   return new Promise((res, rej) => {
