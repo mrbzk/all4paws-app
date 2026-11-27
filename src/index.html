@@ -691,6 +691,21 @@ html{scroll-behavior:smooth}
 .bimg img{width:100%;height:100%;object-fit:cover;display:block}
 .bimg.logo{border-radius:50%}.bimg.logo img{object-fit:contain}
 .bmeta{display:flex;flex-direction:column;gap:4px;min-width:0}
+.ggrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.gtile{position:relative;aspect-ratio:1/1;border-radius:12px;overflow:hidden;border:1px solid var(--line);background:var(--surface-2);margin:0}
+.gtile img{width:100%;height:100%;object-fit:cover;display:block}
+.gacts{position:absolute;left:0;right:0;bottom:0;display:flex;gap:6px;justify-content:center;padding:8px;background:linear-gradient(transparent,rgba(0,0,0,.45))}
+.gacts .btn{background:var(--surface)}
+.gadd{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;cursor:pointer;border-style:dashed;color:var(--accent);font-weight:700}
+.gadd:hover{border-color:var(--accent)}
+.gadd:focus-within{outline:2px solid var(--accent);outline-offset:2px}
+.gadd svg.bi{width:26px;height:26px}
+.hero .wrap.solo{grid-template-columns:1fr}
+.gallery.n1{grid-template-columns:1fr}.gallery.n1 figure{aspect-ratio:4/3}
+.gallery.n2{grid-template-columns:1fr 1fr}.gallery.n2 figure{aspect-ratio:3/4}
+.gallery.n3{grid-template-columns:1fr 1fr;grid-template-rows:1fr 1fr}.gallery.n3 figure:first-child{grid-row:span 2;aspect-ratio:auto}
+.gallery.n4{grid-template-columns:1fr 1fr}
+.gallery.n5{grid-template-columns:repeat(6,1fr)}.gallery.n5 figure{grid-column:span 2}.gallery.n5 figure:nth-child(-n+2){grid-column:span 3;aspect-ratio:4/3}
 .bmeta .row{margin-top:4px;gap:6px}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
@@ -1854,8 +1869,8 @@ const HOME_SERVICES = [
 ];
 function viewHome() {
   const c = C();
-  return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
-    '<div class="gallery" role="list" aria-label="Photos of Nicole and the dogs">' + GALLERY.map(([f, alt], i) => '<figure role="listitem"><img src="' + esc(brandSrc("g" + (i + 1), "img/" + f + ".jpg")) + '" alt="' + esc(alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div></div></section>" +
+  return '<section class="hero"><div class="wrap' + (galleryItems().length ? "" : " solo") + '"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
+    (galleryItems().length ? '<div class="gallery n' + galleryItems().length + '" role="list" aria-label="Photos of Nicole and the dogs">' + galleryItems().map(g => '<figure role="listitem"><img src="' + esc(g.src) + '" alt="' + esc(g.alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div>" : "") + "</div></section>" +
     '<section class="block"><div class="wrap"><h2>Services</h2><ul class="svc-list">' + HOME_SERVICES.map(([cat, name, line]) => '<li><span class="cat ' + cat + '" aria-hidden="true"></span><div><h3>' + name + '</h3><p class="muted">' + line + "</p></div></li>").join("") +
     '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Bespoke, hyperrealistic watercolour portraits of your dog by award-winning artist Adrian Smart. A timeless keepsake, or a gift to treasure.</p><p style="margin:8px 0 0"><a href="#portraits">See his work</a></p></div></li></ul>' +
     '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div></section>' +
@@ -2014,11 +2029,18 @@ async function loadGoogleStatus() {
 }
 function sideMini() { try { return localStorage.getItem("dogco-side-mini") === "1"; } catch (e) { return !!S.sideMini; } }
 // Photos and brand: the logo and website photos, replaceable from Settings > Business
-const BRAND_SLOTS = [["logo", "Logo", "Top of every page. Square works best.", "img/logo-160.png"], ["about", "About us photo", "The big photo on the About us page.", "img/nicole.jpg"]].concat(GALLERY.map(([f], i) => ["g" + (i + 1), "Homepage photo " + (i + 1), i ? "" : "The gallery beside the headline on the homepage.", "img/" + f + ".jpg"]));
+const BRAND_SLOTS = [["logo", "Logo", "Top of every page. Square works best.", "img/logo-160.png"], ["about", "About us photo", "The big photo on the About us page.", "img/nicole.jpg"]];
+const GALLERY_KEYS = ["g1", "g2", "g3", "g4", "g5", "g6"];
+// Homepage photos: up to 6, in order. Until changed, the original six photos are used.
+function galleryKeys() { const g = C().gallery; return Array.isArray(g) ? g.filter(k => GALLERY_KEYS.includes(k)).slice(0, 6) : GALLERY_KEYS.slice(); }
+function galleryItems() { return galleryKeys().map(k => { const i = GALLERY_KEYS.indexOf(k); const up = S.brand && S.brand[k]; return { key: k, src: up || "img/" + GALLERY[i][0] + ".jpg", alt: up ? "Photo of dogs we look after" : GALLERY[i][1] }; }); }
 function brandSrc(key, fallback) { return (S.brand && S.brand[key]) || fallback; }
 function brandCard(sec) {
   const slot = ([k, label, hint, def]) => { const custom = !!(S.brand && S.brand[k]); return '<div class="bslot"><div class="bimg' + (k === "logo" ? " logo" : "") + '"><img src="' + esc(brandSrc(k, k === "about" ? (C().heroPhoto || def) : def)) + '" alt="' + esc(label) + '" loading="lazy"></div><div class="bmeta"><strong>' + esc(label) + "</strong>" + (hint ? '<span class="small muted">' + esc(hint) + "</span>" : "") + '<div class="row"><label class="btn sm"><input type="file" class="vh" accept="image/*" data-brand="' + k + '">' + (custom ? "Replace" : "Upload") + "</label>" + (custom ? '<button type="button" class="btn sm ghost" data-act="brand-reset" data-id="' + k + '">Use original</button>' : "") + "</div></div></div>"; };
-  return '<section class="card stack" data-sec="business"' + (sec === "business" ? "" : " hidden") + '><div><h3>Photos and brand</h3><p class="small muted">The logo and photos customers see on the website. Pick a new picture to replace one straight away. Large photos are made smaller automatically.</p></div><div class="bgrid">' + BRAND_SLOTS.map(slot).join("") + "</div></section>";
+  const items = galleryItems();
+  const gal = items.map((g, i) => '<div class="gtile"><img src="' + esc(g.src) + '" alt="' + esc("Homepage photo " + (i + 1)) + '" loading="lazy"><div class="gacts"><label class="btn sm"><input type="file" class="vh" accept="image/*" data-brand="' + g.key + '">Replace</label><button type="button" class="btn sm ghost danger" data-act="gallery-del" data-id="' + g.key + '">Delete</button></div></div>').join("") +
+    (items.length < 6 ? '<label class="gtile gadd"><input type="file" class="vh" accept="image/*" data-brand="add">' + lucide("plus") + "<span>Add photo</span></label>" : "");
+  return '<section class="card stack" data-sec="business"' + (sec === "business" ? "" : " hidden") + '><div><h3>Photos and brand</h3><p class="small muted">The logo and photos customers see on the website. Pick a new picture to replace one straight away. Large photos are made smaller automatically.</p></div><div class="bgrid">' + BRAND_SLOTS.map(slot).join("") + '</div><div><h3 style="font-size:1rem">Homepage photos <span class="muted small">' + items.length + ' of 6</span></h3><p class="small muted">Shown beside the headline on the homepage. The layout adjusts to how many there are' + (items.length ? "" : ", and with none the headline uses the full width") + '.</p></div><div class="ggrid">' + gal + "</div></section>";
 }
 function brandImage(file, isLogo) {
   return new Promise((res, rej) => {
@@ -2847,6 +2869,15 @@ async function handleClick(e) {
       try { await callFn("googleDisconnect"); S.gStatus = undefined; toast("Google Calendar disconnected"); render(); } catch (e) { toast((e && e.message) || "Couldn't disconnect."); }
       break;
     }
+    case "gallery-del": {
+      if (!isOwner() || !confirm("Delete this photo from the homepage?")) break;
+      try {
+        await putCfg(Object.assign({}, S.cfg || {}, { gallery: galleryKeys().filter(k => k !== id) }));
+        if (S.brand && S.brand[id]) { if (S.mode === "live") await db.collection("brand").doc(id).delete(); const b = Object.assign({}, S.brand); delete b[id]; S.brand = b; }
+        render(); toast("Photo deleted");
+      } catch (e) { toast("Couldn't delete that. Try again."); }
+      break;
+    }
     case "brand-reset": { if (!isOwner()) break; try { if (S.mode === "live") await db.collection("brand").doc(id).delete(); const b = Object.assign({}, S.brand); delete b[id]; S.brand = b; render(); toast("Back to the original photo"); } catch (e) { toast("Couldn't change that. Try again."); } break; }
     case "contact-again": S.contactSent = ""; render(); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); const roles = Object.assign({}, t.roles || {}); delete roles[id]; try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids, roles })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
@@ -2931,7 +2962,15 @@ document.addEventListener("change", async (e) => {
   if (el.dataset && el.dataset.brand && el.files && el.files[0]) {
     if (!isOwner()) return; const key = el.dataset.brand; const f = el.files[0]; el.value = "";
     toast("Uploading...");
-    try { const data = await brandImage(f, key === "logo"); if (S.mode === "live") await db.collection("brand").doc(key).set({ data, at: new Date().toISOString() }); S.brand = Object.assign({}, S.brand, { [key]: data }); render(); toast("Photo updated on the website"); }
+    try {
+      const keys = galleryKeys(); const slot = key === "add" ? GALLERY_KEYS.find(k => !keys.includes(k)) : key;
+      if (!slot) { toast("You already have 6 photos. Delete one first."); return; }
+      const data = await brandImage(f, slot === "logo");
+      if (S.mode === "live") await db.collection("brand").doc(slot).set({ data, at: new Date().toISOString() });
+      S.brand = Object.assign({}, S.brand, { [slot]: data });
+      if (key === "add") await putCfg(Object.assign({}, S.cfg || {}, { gallery: keys.concat(slot) }));
+      render(); toast(key === "add" ? "Photo added to the homepage" : "Photo updated on the website");
+    }
     catch (er) { toast((er && er.message) || "Couldn't save that photo. Try again."); }
     return;
   }
