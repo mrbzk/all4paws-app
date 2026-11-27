@@ -684,6 +684,14 @@ html{scroll-behavior:smooth}
   .admin.mini .side .badge,.admin.mini .side .cnt-side{position:absolute;top:2px;right:2px;font-size:.62rem;padding:0 5px;line-height:1.5}
   .admin.mini .side .gear{padding-top:12px}
 }
+/* Photos and brand */
+.bgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(250px,1fr));gap:12px}
+.bslot{display:flex;gap:12px;align-items:center;border:1px solid var(--line);border-radius:12px;padding:10px;background:var(--surface)}
+.bimg{width:84px;height:84px;flex:none;border-radius:10px;overflow:hidden;background:var(--surface-2)}
+.bimg img{width:100%;height:100%;object-fit:cover;display:block}
+.bimg.logo{border-radius:50%}.bimg.logo img{object-fit:contain}
+.bmeta{display:flex;flex-direction:column;gap:4px;min-width:0}
+.bmeta .row{margin-top:4px;gap:6px}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
@@ -786,6 +794,7 @@ const DEFAULT_CFG = {
   phone: "07000 000000",
   email: "hello@example.com",
   currency: "£",
+  currencyCode: "GBP",
   kennelRuns: 8,
   daycareCap: 12,
   groupWalkCap: 6,
@@ -1055,14 +1064,31 @@ const S = {
   canAdmin: true, me: null, adminTab: "today", modal: null, toast: "",
   bFilter: "upcoming", cQuery: "", cSel: null, draft: { repeat: 1 }, done: null, portalEmail: "", portalErr: "",
   errors: [], netNote: "", updates: [], messages: [], days: [], thread: null, cmp: null, staffId: "", assets: null,
-  lastSub: {}, enquiries: [], meetings: [], meetBusy: [], gBusy: null, meet: {}, role: "admin", showNums: false, setTab: "business", undo: null, toastUndo: false
+  lastSub: {}, brand: {}, enquiries: [], meetings: [], meetBusy: [], gBusy: null, meet: {}, role: "admin", showNums: false, setTab: "business", undo: null, toastUndo: false
 };
 let db = null;
 const $app = document.getElementById("app");
 
 function C() { const c = Object.assign({}, DEFAULT_CFG, S.cfg || {}); if (!Array.isArray(c.services) || !c.services.length) c.services = DEFAULT_CFG.services; if (!Array.isArray(c.staff)) c.staff = DEFAULT_CFG.staff; return c; }
 function esc(v) { return String(v == null ? "" : v).replace(/[&<>"']/g, ch => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[ch])); }
-function money(n) { const c = C().currency || ""; return c + (Number(n) || 0).toFixed(Number(n) % 1 ? 2 : 0); }
+// Currencies for the UK, Europe and North America. The code drives prices, the Money icon, Stripe and Xero.
+const CURRENCIES = [["GBP", "£", "British pound", "en-GB"], ["EUR", "€", "Euro", "en-IE"], ["USD", "$", "US dollar", "en-US"], ["CAD", "$", "Canadian dollar", "en-CA"], ["MXN", "$", "Mexican peso", "es-MX"], ["CHF", "CHF", "Swiss franc", "de-CH"], ["SEK", "kr", "Swedish krona", "sv-SE"], ["NOK", "kr", "Norwegian krone", "nb-NO"], ["DKK", "kr", "Danish krone", "da-DK"], ["ISK", "kr", "Icelandic króna", "is-IS"], ["PLN", "zł", "Polish złoty", "pl-PL"], ["CZK", "Kč", "Czech koruna", "cs-CZ"], ["HUF", "Ft", "Hungarian forint", "hu-HU"], ["RON", "lei", "Romanian leu", "ro-RO"]];
+function curCode() { const c = C(); if (CURRENCIES.some(x => x[0] === c.currencyCode)) return c.currencyCode; return c.currency === "€" ? "EUR" : c.currency === "$" ? "USD" : "GBP"; }
+function curInfo() { const k = curCode(); return CURRENCIES.find(x => x[0] === k) || CURRENCIES[0]; }
+function curSym() { return curInfo()[1]; }
+function money(n) {
+  const v = Number(n) || 0; const [code, sym, , loc] = curInfo(); const dp = v % 1 ? 2 : 0;
+  try { return new Intl.NumberFormat(loc, { style: "currency", currency: code, currencyDisplay: "narrowSymbol", minimumFractionDigits: dp, maximumFractionDigits: dp }).format(v); }
+  catch (e) { return sym + v.toFixed(dp); }
+}
+function curIconPaths() {
+  const k = curCode();
+  if (k === "GBP") return '<path d="M17 6.5A4.5 4.5 0 0 0 9 9.5V20h9M6 13h8M6 20h3"/>';
+  if (k === "EUR") return '<path d="M4 10h12"/><path d="M4 14h9"/><path d="M19 6a7.7 7.7 0 0 0-5.2-2A7.9 7.9 0 0 0 6 12c0 4.4 3.5 8 7.8 8 2 0 3.8-.8 5.2-2"/>';
+  if (k === "USD" || k === "CAD" || k === "MXN") return '<path d="M12 2v20"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>';
+  if (k === "CHF") return '<path d="M10 21V3h8"/><path d="M6 16h9"/><path d="M10 9.5h7"/>';
+  return '<rect width="20" height="12" x="2" y="6" rx="2"/><circle cx="12" cy="12" r="2"/><path d="M6 12h.01M18 12h.01"/>';
+}
 function uid(p) { return p + Date.now().toString(36) + Math.random().toString(36).slice(2, 6); }
 function svcById(id) { return C().services.find(s => s.id === id); }
 function client(id) { return S.clients.find(c => c.id === id); }
@@ -1227,7 +1253,7 @@ function xeroExport(includeSent, onlyClient) {
     let no = (x.prefix || "") + invoiceNo(cl).replace(/^INV-/, ""); let n = 2; while (used.has(no)) no = no.replace(/-\d+$/, "") + "-" + n++; used.add(no);
     byClient[cid].sort((a, b) => a.date.localeCompare(b.date)).forEach(b => linesFor(b).forEach(l => {
       const desc = (l.description + (l.pet && !/,/.test(l.description) ? ", " + l.pet : "")).replace(/\u00a0/g, " ");
-      rows.push([cl.name, cl.email || "", cl.address || "", "", "", "", "", "", "", "", no, C().businessName, ukDate(t), ukDate(due), "", desc, l.qty || 1, Number(l.unitPrice || l.amount || 0).toFixed(2), "", x.accountCode, x.taxType, "", "", "", "", "GBP", ""]);
+      rows.push([cl.name, cl.email || "", cl.address || "", "", "", "", "", "", "", "", no, C().businessName, ukDate(t), ukDate(due), "", desc, l.qty || 1, Number(l.unitPrice || l.amount || 0).toFixed(2), "", x.accountCode, x.taxType, "", "", "", "", curCode(), ""]);
     }));
   });
   return { rows, bookings: list, invoices: Object.keys(byClient).length };
@@ -1335,10 +1361,10 @@ function integrationsCards(sec) {
   else conn = (ss.reason ? '<p class="small">' + esc(ss.reason) + "</p>" : "") + '<div class="row"><button class="btn primary" type="button" data-act="stripe-connect">Connect with Stripe</button></div><p class="small muted">Sign in to your Stripe account on Stripe\'s page and click Allow. No keys to copy. If you don\'t have a Stripe account yet, you can create one there.' + (ss.live ? "" : " Test mode is on, so Stripe will connect a test account.") + "</p>";
   h += '<section class="card stack" data-sec="integrations"' + hid + '><div class="row" style="justify-content:space-between;align-items:flex-start"><div><h3>Stripe</h3><p class="small muted">Take card payments and deposits. Customers pay on Stripe\'s secure page and the money goes straight to your own Stripe account. Bookings are marked paid automatically.</p></div><span class="pill ' + pillCls + '">' + pillTxt + "</span></div>" + conn +
     '<form class="stack" data-form="stripe-settings"><div class="field"><label for="st-mode">How customers pay by card</label>' + sel("mode", st.mode, [["checkout", "Card payments through your connected Stripe account"], ["links", "Payment Links (customer types the amount, you mark paid)"], ["off", "Off"]]) + '<span class="hint">Card payments start working once Stripe is connected.</span></div>' +
-    '<div class="grid2"><div class="field"><label for="st-depositFor">Ask for a deposit on</label>' + sel("depositFor", st.depositFor, [["boarding", "Overnight stays only"], ["all", "Every booking"], ["none", "No deposits"]]) + '</div><div class="field"><label for="st-depositType">Deposit is</label>' + sel("depositType", st.depositType, [["fixed", "A fixed amount (£)"], ["percent", "A percentage of the booking"]]) + '</div></div>' +
-    '<div class="grid2"><div class="field"><label for="st-dv">Deposit (£ or %)</label><input type="number" id="st-dv" name="depositValue" min="0" step="' + (st.depositType === "fixed" ? "0.01" : "1") + '" value="' + esc(st.depositValue) + '"><span class="hint">A percentage: 25 takes 25% of the booking. A fixed amount: 25 takes £25.</span></div><div class="field"><label for="st-dmin">Only ask when the booking is at least (£)</label><input type="number" id="st-dmin" name="depositMin" min="0" step="1" value="' + esc(st.depositMin || 0) + '"><span class="hint">0 asks on every booking that matches above. For example 100 skips the deposit on anything under £100.</span></div></div>' +
-    (cardsOn() || st.mode === "checkout" ? '<p class="small muted">Example: a £' + (Math.max(Number(st.depositMin) || 0, 200)) + ' booking takes a ' + money(depositAmt(Math.max(Number(st.depositMin) || 0, 200))) + ' deposit.</p>' : "") +
-    '<details class="stack"><summary class="small">Payment Links (if card payments aren\'t set up)</summary><div class="field"><label for="st-dep">Deposit payment link</label><input type="url" id="st-dep" name="depositLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.depositLink) + '"></div><div class="field"><label for="st-lbl">Deposit amount shown to customers</label><input type="text" id="st-lbl" name="depositLabel" placeholder="£20" value="' + esc(st.depositLabel) + '"></div><div class="field"><label for="st-pay">Pay-a-bill link (customer enters the amount)</label><input type="url" id="st-pay" name="payLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.payLink) + '"></div></details>' +
+    '<div class="grid2"><div class="field"><label for="st-depositFor">Ask for a deposit on</label>' + sel("depositFor", st.depositFor, [["boarding", "Overnight stays only"], ["all", "Every booking"], ["none", "No deposits"]]) + '</div><div class="field"><label for="st-depositType">Deposit is</label>' + sel("depositType", st.depositType, [["fixed", "A fixed amount (" + curSym() + ")"], ["percent", "A percentage of the booking"]]) + '</div></div>' +
+    '<div class="grid2"><div class="field"><label for="st-dv">Deposit (' + esc(curSym()) + ' or %)</label><input type="number" id="st-dv" name="depositValue" min="0" step="' + (st.depositType === "fixed" ? "0.01" : "1") + '" value="' + esc(st.depositValue) + '"><span class="hint">A percentage: 25 takes 25% of the booking. A fixed amount: 25 takes ' + money(25) + '.</span></div><div class="field"><label for="st-dmin">Only ask when the booking is at least (' + esc(curSym()) + ')</label><input type="number" id="st-dmin" name="depositMin" min="0" step="1" value="' + esc(st.depositMin || 0) + '"><span class="hint">0 asks on every booking that matches above. For example 100 skips the deposit on anything under ' + money(100) + '.</span></div></div>' +
+    (cardsOn() || st.mode === "checkout" ? '<p class="small muted">Example: a ' + money(Math.max(Number(st.depositMin) || 0, 200)) + ' booking takes a ' + money(depositAmt(Math.max(Number(st.depositMin) || 0, 200))) + ' deposit.</p>' : "") +
+    '<details class="stack"><summary class="small">Payment Links (if card payments aren\'t set up)</summary><div class="field"><label for="st-dep">Deposit payment link</label><input type="url" id="st-dep" name="depositLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.depositLink) + '"></div><div class="field"><label for="st-lbl">Deposit amount shown to customers</label><input type="text" id="st-lbl" name="depositLabel" placeholder="' + esc(curSym()) + '20" value="' + esc(st.depositLabel) + '"></div><div class="field"><label for="st-pay">Pay-a-bill link (customer enters the amount)</label><input type="url" id="st-pay" name="payLink" placeholder="https://buy.stripe.com/..." value="' + esc(st.payLink) + '"></div></details>' +
 
     '<p class="small muted">Never paste a Stripe secret key into the app.</p><div class="row"><button class="btn" type="submit">Save Stripe settings</button></div></form></section>';
 
@@ -1366,6 +1392,7 @@ function startAuth() {
   db.doc("config/main").onSnapshot(snap => { S.cfg = snap.exists ? snap.data() : null; render(); }, liveFail);
   db.collection("busy").onSnapshot(snap => { S.busy = rowsOf(snap); mergeBookings(); render(); }, liveFail);
   db.collection("meetbusy").onSnapshot(snap => { S.meetBusy = rowsOf(snap); render(); }, () => {});
+  db.collection("brand").onSnapshot(snap => { const b = {}; rowsOf(snap).forEach(r => { if (r.data) b[r.id] = r.data; }); S.brand = b; render(); }, () => {});
   FB_AUTH.M.onAuthStateChanged(FB_AUTH.auth, user => { handleAuth(user).catch(e => { console.warn("auth", e); S.authReady = true; S.portalErr = "Something went wrong signing you in. Reload the page and try again."; render(); }); });
   render();
 }
@@ -1480,7 +1507,7 @@ if (USE_PATHS) {
 function fixLinks() { if (!USE_PATHS) return; document.querySelectorAll('a[href^="#"]').forEach(a => { const r = a.getAttribute("href").slice(1); if (ROUTES.includes(r)) a.setAttribute("href", r === "home" ? "/" : "/" + r); }); }
 
 // ----- rendering -----
-const LOGO = '<img class="logo-img" src="img/logo-160.png" alt="" width="44" height="44">';
+function logoHtml() { return '<img class="logo-img" src="' + esc(brandSrc("logo", "img/logo-160.png")) + '" alt="" width="44" height="44">'; }
 
 const NAV_IC = {
   contact: '<svg class="ic" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 6L2 7"/></svg>',
@@ -1577,7 +1604,7 @@ const LUCIDE = {
   panelopen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>',
   textsize: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>'
 };
-function lucide(name, cls) { return '<svg class="' + (cls || "bi") + '" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (LUCIDE[name] || "") + "</svg>"; }
+function lucide(name, cls) { return '<svg class="' + (cls || "bi") + '" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (name === "pound" ? curIconPaths() : LUCIDE[name] || "") + "</svg>"; }
 // Universal actions in tight rows: icon only, name kept for screen readers and as a tooltip
 const ICON_ONLY = { "Call": "phone", "Email": "mail", "Message": "message", "Edit": "pencil", "Delete": "trash", "Remove": "trash", "← Previous": "left", "Next →": "right", "Add to calendar": "calplus", "Refresh": "refresh" };
 // Main actions: icon plus label
@@ -1635,7 +1662,7 @@ function renderView() {
   const nY = needsYou() && !isQuiet() ? needsYou() : 0;
   const modeSw = isAdmin ? '<a class="viewsite" href="#home"><span aria-hidden="true">←</span> View site</a>' : "";
   document.body.classList.toggle("admin-mode", isAdmin);
-  let html = '<header class="top"><div class="wrap"><a class="brand" href="#home">' + LOGO + "<span>" + esc(c.businessName) + '</span></a>' + modeSw + (nav.length ? '<nav class="nav" aria-label="Main">' : '<nav class="nav" hidden>') +
+  let html = '<header class="top"><div class="wrap"><a class="brand" href="#home">' + logoHtml() + "<span>" + esc(c.businessName) + '</span></a>' + modeSw + (nav.length ? '<nav class="nav" aria-label="Main">' : '<nav class="nav" hidden>') +
     nav.map(([k, l]) => '<a href="#' + k + '"' + (k === "admin" ? ' class="admin-link"' : "") + (v === k ? ' aria-current="page"' : "") + ">" + (NAV_IC[k] || "") + "<span>" + l + (k === "portal" && S.me && unreadForClient(S.me) ? ' <span class="nbadge num" aria-label="unread">' + unreadForClient(S.me) + "</span>" : "") + (k === "admin" && needsYou() && !isQuiet() ? ' <span class="nbadge num" aria-label="needs you">' + needsYou() + "</span>" : "") + "</span></a>").join("") + "</nav></div></header>";
   html += appBanners(v);
   if (S.netNote) html += '<div class="banner"><div class="wrap">' + esc(S.netNote) + "</div></div>";
@@ -1828,7 +1855,7 @@ const HOME_SERVICES = [
 function viewHome() {
   const c = C();
   return '<section class="hero"><div class="wrap"><div><p class="eyebrow">' + esc(c.businessName) + '</p><h1 class="quote">' + esc(c.tagline || "Everything your dog needs in one place") + '</h1><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
-    '<div class="gallery" role="list" aria-label="Photos of Nicole and the dogs">' + GALLERY.map(([f, alt]) => '<figure role="listitem"><img src="img/' + f + '.jpg" alt="' + esc(alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div></div></section>" +
+    '<div class="gallery" role="list" aria-label="Photos of Nicole and the dogs">' + GALLERY.map(([f, alt], i) => '<figure role="listitem"><img src="' + esc(brandSrc("g" + (i + 1), "img/" + f + ".jpg")) + '" alt="' + esc(alt) + '" width="640" height="640" loading="lazy"></figure>').join("") + "</div></div></section>" +
     '<section class="block"><div class="wrap"><h2>Services</h2><ul class="svc-list">' + HOME_SERVICES.map(([cat, name, line]) => '<li><span class="cat ' + cat + '" aria-hidden="true"></span><div><h3>' + name + '</h3><p class="muted">' + line + "</p></div></li>").join("") +
     '<li class="soon"><span class="cat portrait" aria-hidden="true"></span><div><h3><span class="pill soon-pill">Coming soon</span> Pet Portraits</h3><p class="muted">Bespoke, hyperrealistic watercolour portraits of your dog by award-winning artist Adrian Smart. A timeless keepsake, or a gift to treasure.</p><p style="margin:8px 0 0"><a href="#portraits">See his work</a></p></div></li></ul>' +
     '<div class="row" style="margin-top:22px"><a class="btn primary lg" href="#book">Book a service</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div></section>' +
@@ -1986,6 +2013,27 @@ async function loadGoogleStatus() {
   S.gStatusLoading = false; render();
 }
 function sideMini() { try { return localStorage.getItem("dogco-side-mini") === "1"; } catch (e) { return !!S.sideMini; } }
+// Photos and brand: the logo and website photos, replaceable from Settings > Business
+const BRAND_SLOTS = [["logo", "Logo", "Top of every page. Square works best.", "img/logo-160.png"], ["about", "About us photo", "The big photo on the About us page.", "img/nicole.jpg"]].concat(GALLERY.map(([f], i) => ["g" + (i + 1), "Homepage photo " + (i + 1), i ? "" : "The gallery beside the headline on the homepage.", "img/" + f + ".jpg"]));
+function brandSrc(key, fallback) { return (S.brand && S.brand[key]) || fallback; }
+function brandCard(sec) {
+  const slot = ([k, label, hint, def]) => { const custom = !!(S.brand && S.brand[k]); return '<div class="bslot"><div class="bimg' + (k === "logo" ? " logo" : "") + '"><img src="' + esc(brandSrc(k, k === "about" ? (C().heroPhoto || def) : def)) + '" alt="' + esc(label) + '" loading="lazy"></div><div class="bmeta"><strong>' + esc(label) + "</strong>" + (hint ? '<span class="small muted">' + esc(hint) + "</span>" : "") + '<div class="row"><label class="btn sm"><input type="file" class="vh" accept="image/*" data-brand="' + k + '">' + (custom ? "Replace" : "Upload") + "</label>" + (custom ? '<button type="button" class="btn sm ghost" data-act="brand-reset" data-id="' + k + '">Use original</button>' : "") + "</div></div></div>"; };
+  return '<section class="card stack" data-sec="business"' + (sec === "business" ? "" : " hidden") + '><div><h3>Photos and brand</h3><p class="small muted">The logo and photos customers see on the website. Pick a new picture to replace one straight away. Large photos are made smaller automatically.</p></div><div class="bgrid">' + BRAND_SLOTS.map(slot).join("") + "</div></section>";
+}
+function brandImage(file, isLogo) {
+  return new Promise((res, rej) => {
+    const img = new Image(); const u = URL.createObjectURL(file);
+    img.onload = () => {
+      const max = isLogo ? 320 : 1400; let k = Math.min(1, max / Math.max(img.width, img.height));
+      const draw = (scale, q) => { const cv = document.createElement("canvas"); cv.width = Math.round(img.width * scale); cv.height = Math.round(img.height * scale); cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height); return isLogo ? cv.toDataURL("image/png") : cv.toDataURL("image/jpeg", q); };
+      let out = draw(k, 0.82); let q = 0.82;
+      while (out.length > 700000 && (q > 0.5 || k > 0.3)) { if (q > 0.5) q -= 0.1; else k *= 0.8; out = draw(k, q); }
+      URL.revokeObjectURL(u); out.length > 900000 ? rej(new Error("That picture is too large. Try a smaller one.")) : res(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(u); rej(new Error("That file isn't a picture we can read.")); };
+    img.src = u;
+  });
+}
 function isOwner() { return !!S.canAdmin && S.role !== "staff"; }
 function roleOf(team, em) { return ((team && team.roles) || {})[String(em || "").toLowerCase()] === "staff" ? "staff" : "admin"; }
 function newEnquiries() { return isOwner() ? (S.enquiries || []).filter(x => x.status !== "done").length : 0; }
@@ -2013,7 +2061,7 @@ function viewAbout() {
   const c = C(); const ph = (src, alt) => '<figure class="about-photo"><img src="' + esc(src) + '" alt="' + esc(alt) + '" loading="lazy"></figure>';
   const paras = String(c.aboutText || ABOUT_DEFAULT).split(/\n\s*\n/).map(x => "<p>" + esc(x.trim()) + "</p>").join("");
   return '<section class="hero about-hero"><div class="wrap"><div><p class="eyebrow">About us</p><h1 class="quote">Meet ' + esc(c.businessName) + '</h1><div class="about-copy">' + paras + '</div><div class="row"><a class="btn primary lg" href="#book">Book now</a><a class="btn lg" href="#meet">Book a Meet &amp; Greet</a></div></div>' +
-    ph(c.heroPhoto || "img/nicole.jpg", "Nicole on a walk with the dogs") + '</div></section>' +
+    ph(brandSrc("about", c.heroPhoto || "img/nicole.jpg"), "Nicole on a walk with the dogs") + '</div></section>' +
     '<section class="block"><div class="wrap"><h2>The team</h2><div class="team"><div class="card"><h3>Nicole</h3><p class="muted">Founder. Walks, daycare, overnight stays and drop-ins.</p></div><div class="card"><h3>Lauren</h3><p class="muted">Groomer. Baths, tidy-ups and full clips.</p></div></div></div></section>';
 }
 const ABOUT_DEFAULT = "ALL4PAWS is Nicole's dog care business: walks, daycare, overnight stays, drop-ins and grooming, all from one small team who get to know every dog by name.\n\nNicole looks after the walks, daycare, overnight stays and drop-ins herself, and Lauren runs the grooming. Dogs stay in a real home, keep their own food and routine, and you get photos and notes after every visit.\n\nWe're always happy to meet new dogs. Book a free meet and greet and come and say hello.";
@@ -2321,7 +2369,7 @@ const GROUP_IC = {
   today: ADM_IC('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>'),
   diary: ADM_IC('<rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/>'),
   customers: ADM_IC('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/>'),
-  money: ADM_IC('<path d="M17 6.5A4.5 4.5 0 0 0 9 9.5V20h9M6 13h8M6 20h3"/>'),
+  get money() { return ADM_IC(curIconPaths()); },
   messages: ADM_IC('<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>'),
   more: ADM_IC('<circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/>'),
   site: ADM_IC('<path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/>')
@@ -2664,7 +2712,7 @@ function adminSettings() {
   h += '<form class="stack" data-form="settings">';
   if (!S.clients.some(c => c.source === "spreadsheet")) h += '<div class="card stack"><h3>Import customer list</h3><p class="small muted">Choose the <strong>customers-import.json</strong> file to add each customer, their pets and their prices. It also updates the services to Walk, Drop-in visit, Cat drop-in, Daycare and Overnight stay, and removes the made-up example customers. Customers already imported are updated, not duplicated.</p>' + (S.clients.some(c => c.source === "spreadsheet") ? '<p class="small"><span class="pill ok">Imported</span> ' + S.clients.filter(c => c.source === "spreadsheet").length + " customers from the spreadsheet.</p>" : "") + '<label class="btn" style="align-self:flex-start">Choose file<input type="file" accept=".json,application/json" data-change="import-file" hidden></label></div>';
   if (S.fb && !S.clients.length) h += '<div class="card stack"><h3>Empty database</h3><p class="small muted">Load the made-up example customers, dogs, bookings and messages to try everything out. Remove them before going live.</p><div class="row"><button class="btn" type="button" data-act="load-sample">Load example data</button></div></div>';
-  h += part("business", "Business", "How you appear on the booking site.", '<div class="grid2"><div class="field"><label for="s-name">Business name</label><input type="text" id="s-name" name="businessName" value="' + esc(c.businessName) + '"></div><div class="field"><label for="s-area">Area served</label><input type="text" id="s-area" name="area" value="' + esc(c.area) + '"></div><div class="field" style="grid-column:1/-1"><label for="s-tag">Headline on the booking site</label><input type="text" id="s-tag" name="tagline" value="' + esc(c.tagline) + '"></div><div class="field"><label for="s-phone">Phone</label><input type="text" id="s-phone" name="phone" value="' + esc(c.phone) + '"></div><div class="field"><label for="s-email">Email</label><input type="text" id="s-email" name="email" value="' + esc(c.email) + '"></div><div class="field"><label for="s-cur">Currency symbol</label><input type="text" id="s-cur" name="currency" maxlength="3" value="' + esc(c.currency) + "\"></div></div>" + '<div class="field"><label for="s-about">About us page</label><textarea id="s-about" name="aboutText" rows="7">' + esc(c.aboutText || ABOUT_DEFAULT) + '</textarea><span class="hint">Leave a blank line between paragraphs.</span></div>');
+  h += part("business", "Business", "How you appear on the booking site.", '<div class="grid2"><div class="field"><label for="s-name">Business name</label><input type="text" id="s-name" name="businessName" value="' + esc(c.businessName) + '"></div><div class="field"><label for="s-area">Area served</label><input type="text" id="s-area" name="area" value="' + esc(c.area) + '"></div><div class="field" style="grid-column:1/-1"><label for="s-tag">Headline on the booking site</label><input type="text" id="s-tag" name="tagline" value="' + esc(c.tagline) + '"></div><div class="field"><label for="s-phone">Phone</label><input type="text" id="s-phone" name="phone" value="' + esc(c.phone) + '"></div><div class="field"><label for="s-email">Email</label><input type="text" id="s-email" name="email" value="' + esc(c.email) + '"></div><div class="field"><label for="s-cur">Currency</label><select id="s-cur" name="currencyCode">' + [["UK", ["GBP"]], ["Europe", ["EUR", "CHF", "SEK", "NOK", "DKK", "ISK", "PLN", "CZK", "HUF", "RON"]], ["North America", ["USD", "CAD", "MXN"]]].map(([grp, codes]) => '<optgroup label="' + grp + '">' + codes.map(k => { const x = CURRENCIES.find(y => y[0] === k); return '<option value="' + k + '"' + (curCode() === k ? " selected" : "") + ">" + esc(x[2] + " (" + x[1] + ") " + k) + "</option>"; }).join("") + "</optgroup>").join("") + '</select><span class="hint">Changes prices, invoices and card payments everywhere.</span></div>' + "</div>" + '<div class="field"><label for="s-about">About us page</label><textarea id="s-about" name="aboutText" rows="7">' + esc(c.aboutText || ABOUT_DEFAULT) + '</textarea><span class="hint">Leave a blank line between paragraphs.</span></div>');
   h += part("hours", "Days and limits", "Protect your time. Customers can\'t book days off, or past a person\'s daily limit.",
     '<div class="field"><label for="s-dayoff">Days off</label><div class="row"><input type="date" id="s-dayoff" style="max-width:220px"><button class="btn" type="button" data-act="dayoff-add">Add day off</button></div><input type="hidden" id="s-daysoff" name="daysOff" value="' + esc((c.daysOff || []).join(",")) + '"><div id="daysoff-list" class="flags-row" style="margin-top:8px">' + ((c.daysOff || []).length ? c.daysOff.map(d0 => '<span class="flag">' + esc(fmtDate(d0, { weekday: "short", day: "numeric", month: "short", year: "numeric" })) + ' <button type="button" class="linkbtn" data-act="dayoff-rm" data-id="' + esc(d0) + '" aria-label="Remove ' + esc(d0) + '">×</button></span>').join("") : '<span class="small muted">No days off set.</span>') + '</div></div>' +
     '<div class="grid3"><div class="field"><label for="s-runs">Kennel runs</label><input type="number" id="s-runs" name="kennelRuns" min="0" value="' + esc(c.kennelRuns) + '"></div><div class="field"><label for="s-day">Daycare places</label><input type="number" id="s-day" name="daycareCap" min="0" value="' + esc(c.daycareCap) + '"></div><div class="field"><label for="s-grp">Dogs per pack walk</label><input type="number" id="s-grp" name="groupWalkCap" min="1" value="' + esc(c.groupWalkCap) + '"></div></div>' +
@@ -2680,6 +2728,7 @@ function adminSettings() {
     '<div class="row"><button class="btn sm" type="button" data-act="addon-new">New add-on</button><span class="small muted">Save first if you\'ve changed anything else.</span></div>' + aoList.map(a => '<div class="ao-row"><div class="field"><label for="ao-n-' + esc(a.id) + '">Name</label><input type="text" id="ao-n-' + esc(a.id) + '" name="ao_name_' + esc(a.id) + '" value="' + esc(a.name) + '"></div><div class="field"><label for="ao-p-' + esc(a.id) + '">Price</label><input type="number" step="0.5" min="0" id="ao-p-' + esc(a.id) + '" name="ao_price_' + esc(a.id) + '" value="' + esc(a.price) + '"></div><div class="field"><label for="ao-u-' + esc(a.id) + '">Charged</label><select id="ao-u-' + esc(a.id) + '" name="ao_per_' + esc(a.id) + '">' + Object.keys(PER_HELP).map(k => '<option value="' + k + '"' + (a.per === k ? " selected" : "") + ">" + PER_HELP[k] + "</option>").join("") + '</select></div><div class="field" style="grid-column:1/-1"><label for="ao-d-' + esc(a.id) + '">Description</label><input type="text" id="ao-d-' + esc(a.id) + '" name="ao_desc_' + esc(a.id) + '" value="' + esc(a.desc || "") + '"></div><div class="svc-checks"><span class="small muted" style="align-self:center">Offer with:</span>' + c.services.map(sv => '<label><input type="checkbox" name="ao_svc_' + esc(a.id) + '" value="' + esc(sv.id) + '"' + ((a.services || []).includes(sv.id) ? " checked" : "") + ">" + esc(sv.name) + "</label>").join("") + '</div><div class="flags"><label><input type="checkbox" name="ao_active_' + esc(a.id) + '"' + (a.active !== false ? " checked" : "") + '>Offered</label><label><input type="checkbox" name="ao_del_' + esc(a.id) + '">Delete</label></div></div>').join(""));
   h += '<section class="card stack" data-sec="comfort"' + (sec === "comfort" ? "" : " hidden") + '><div><h3>Display</h3><p class="small muted">Make the screen easier on your eyes and brain. Saved straight away, no need to press Save.</p></div>' + comfortControls() + "</section>";
   h += '<div class="row savebar"' + (sec === "logins" || sec === "integrations" || sec === "meet" ? " hidden" : "") + '><button class="btn primary" type="submit">Save settings</button>' + (S.mode === "demo" ? '<button class="btn" type="button" data-act="reset-demo">Reset demo data</button>' : "") + "</div></form>";
+  h += brandCard(sec);
   return h;
 }
 
@@ -2798,6 +2847,7 @@ async function handleClick(e) {
       try { await callFn("googleDisconnect"); S.gStatus = undefined; toast("Google Calendar disconnected"); render(); } catch (e) { toast((e && e.message) || "Couldn't disconnect."); }
       break;
     }
+    case "brand-reset": { if (!isOwner()) break; try { if (S.mode === "live") await db.collection("brand").doc(id).delete(); const b = Object.assign({}, S.brand); delete b[id]; S.brand = b; render(); toast("Back to the original photo"); } catch (e) { toast("Couldn't change that. Try again."); } break; }
     case "contact-again": S.contactSent = ""; render(); break;
     case "admin-remove": { const t = S.team || {}; const list = (t.emails || []).filter(x => x !== id); const uids = Object.fromEntries(Object.entries(t.staffUids || {}).filter(([, em]) => em !== id)); const roles = Object.assign({}, t.roles || {}); delete roles[id]; try { await db.doc("config/admins").set(Object.assign({}, t, { emails: list, staffUids: uids, roles })); toast("Removed " + id); } catch (e) { toast("Couldn't save. Check your connection."); } break; }
     case "staff-signout": S.moreOpen = false; ssoSignOut(); S.me = null; remember(); if (S.fb) S.canAdmin = false; navTo("home"); render(); toast("Signed out"); break;
@@ -2878,6 +2928,13 @@ document.addEventListener("input", (e) => {
 });
 document.addEventListener("change", async (e) => {
   const el = e.target;
+  if (el.dataset && el.dataset.brand && el.files && el.files[0]) {
+    if (!isOwner()) return; const key = el.dataset.brand; const f = el.files[0]; el.value = "";
+    toast("Uploading...");
+    try { const data = await brandImage(f, key === "logo"); if (S.mode === "live") await db.collection("brand").doc(key).set({ data, at: new Date().toISOString() }); S.brand = Object.assign({}, S.brand, { [key]: data }); render(); toast("Photo updated on the website"); }
+    catch (er) { toast((er && er.message) || "Couldn't save that photo. Try again."); }
+    return;
+  }
   if (el.dataset.m && S.modal) { S.modal[el.dataset.m] = el.value; if (el.dataset.m === "reason") render(); return; }
   if (el.dataset.cpet && S.cmp) { const set = new Set(S.cmp.pets || []); el.checked ? set.add(el.dataset.cpet) : set.delete(el.dataset.cpet); S.cmp.pets = [...set]; return; }
   if ((el.id === "cmp-files" || el.id === "cmp-cam") && S.cmp) {
@@ -3102,7 +3159,7 @@ async function handleSubmit(e) {
     const oldStaff = c.staff;
     const staff = String(fd.get("staff") || "").split("\n").map(l => l.trim()).filter(Boolean).map((l, i) => { const [name, role, max] = l.split(",").map(x => (x || "").trim()); const prev = oldStaff.find(s => s.name.toLowerCase() === name.toLowerCase()); return { id: prev ? prev.id : "s" + Date.now().toString(36) + i, name, role: role || "Team", max: Number(max) || 0 }; });
     const services = c.services.map(s => { const n = Object.assign({}, s); n.approval = fd.get("appr_" + s.id) === "on"; if (s.sizes) n.sizes = { S: Number(fd.get("price_" + s.id + "_S")) || 0, M: Number(fd.get("price_" + s.id + "_M")) || 0, L: Number(fd.get("price_" + s.id + "_L")) || 0 }; else n.price = Number(fd.get("price_" + s.id)) || 0; return n; });
-    const cfg = Object.assign({}, c, { businessName: fd.get("businessName") || c.businessName, tagline: fd.get("tagline"), aboutText: fd.get("aboutText") != null ? String(fd.get("aboutText")).trim() : c.aboutText, area: fd.get("area"), phone: fd.get("phone"), email: fd.get("email"), currency: fd.get("currency"), newClientApproval: fd.get("newClientApproval") === "on", trustKnown: fd.get("trustKnown") === "on", quiet: fd.get("quiet") === "on", quietStart: Number(fd.get("quietStart")), quietEnd: Number(fd.get("quietEnd")), daysOff: String(fd.get("daysOff") || "").split(",").filter(Boolean), publicPriceFloor: fd.get("publicPriceFloor") === "on",  kennelRuns: Number(fd.get("kennelRuns")) || 0, daycareCap: Number(fd.get("daycareCap")) || 0, groupWalkCap: Number(fd.get("groupWalkCap")) || 1, staff, services, addons: (c.addons || []).concat(S.newAddons || []).filter(a => fd.get("ao_del_" + a.id) !== "on").map(a => ({ id: a.id, name: String(fd.get("ao_name_" + a.id) || a.name).trim() || "Add-on", desc: String(fd.get("ao_desc_" + a.id) || ""), price: Number(fd.get("ao_price_" + a.id)) || 0, per: fd.get("ao_per_" + a.id) || "dog", services: fd.getAll("ao_svc_" + a.id), active: fd.get("ao_active_" + a.id) === "on" })) });
+    const cfg = Object.assign({}, c, { businessName: fd.get("businessName") || c.businessName, tagline: fd.get("tagline"), aboutText: fd.get("aboutText") != null ? String(fd.get("aboutText")).trim() : c.aboutText, area: fd.get("area"), phone: fd.get("phone"), email: fd.get("email"), currencyCode: CURRENCIES.some(x => x[0] === fd.get("currencyCode")) ? fd.get("currencyCode") : curCode(), currency: (CURRENCIES.find(x => x[0] === fd.get("currencyCode")) || curInfo())[1], newClientApproval: fd.get("newClientApproval") === "on", trustKnown: fd.get("trustKnown") === "on", quiet: fd.get("quiet") === "on", quietStart: Number(fd.get("quietStart")), quietEnd: Number(fd.get("quietEnd")), daysOff: String(fd.get("daysOff") || "").split(",").filter(Boolean), publicPriceFloor: fd.get("publicPriceFloor") === "on",  kennelRuns: Number(fd.get("kennelRuns")) || 0, daycareCap: Number(fd.get("daycareCap")) || 0, groupWalkCap: Number(fd.get("groupWalkCap")) || 1, staff, services, addons: (c.addons || []).concat(S.newAddons || []).filter(a => fd.get("ao_del_" + a.id) !== "on").map(a => ({ id: a.id, name: String(fd.get("ao_name_" + a.id) || a.name).trim() || "Add-on", desc: String(fd.get("ao_desc_" + a.id) || ""), price: Number(fd.get("ao_price_" + a.id)) || 0, per: fd.get("ao_per_" + a.id) || "dog", services: fd.getAll("ao_svc_" + a.id), active: fd.get("ao_active_" + a.id) === "on" })) });
     S.newAddons = [];
     try { await putCfg(cfg); toast("Settings saved"); } catch (err) {}
   }

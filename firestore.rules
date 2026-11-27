@@ -90,6 +90,15 @@ service cloud.firestore {
     // The connected Google Calendar and sign-in states: server only
     match /google/{id} { allow read, write: if false; }
 
+    // Logo and website photos: everyone can see them, only admins change them
+    match /brand/{id} {
+      allow read: if true;
+      allow write: if isOwner() && request.resource.data.keys().hasOnly(['data', 'at'])
+        && request.resource.data.data is string && request.resource.data.data.size() < 950000
+        && request.resource.data.data.matches('data:image/(png|jpeg);base64,.*');
+      allow delete: if isOwner();
+    }
+
     match /busy/{id} {
       allow read: if true;
       allow create, update: if isAdmin() || (

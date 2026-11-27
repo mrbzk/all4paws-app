@@ -152,7 +152,7 @@ exports.createCheckout = onCall({ region: REGION, secrets: [STRIPE_SECRET] }, as
     mode: "payment",
     customer_email: client.email || undefined,
     client_reference_id: client.id,
-    line_items: [{ quantity: 1, price_data: { currency: "gbp", unit_amount: pence, product_data: { name: biz + " " + label.toLowerCase() } } }],
+    line_items: [{ quantity: 1, price_data: { currency: String(cfg.currencyCode || ({ "€": "EUR", "$": "USD" })[cfg.currency] || "GBP").toLowerCase(), unit_amount: pence, product_data: { name: biz + " " + label.toLowerCase() } } }],
     metadata,
     payment_intent_data: { metadata, description: biz + " " + label.toLowerCase() + " for " + client.name },
     success_url: origin + "/portal?paid=1&cs={CHECKOUT_SESSION_ID}",
