@@ -668,6 +668,24 @@ html{scroll-behavior:smooth}
   .wlist .chip{font-size:.95rem;padding:10px 12px}
   .month{touch-action:pan-y}
 }
+/* Desktop: collapse the back office menu to icons */
+.side-toggle{display:none}
+@media (max-width:860px){ .side .side-toggle{display:none!important} }
+@media (min-width:861px){
+  .admin{transition:grid-template-columns .2s ease}
+  .side .side-toggle{all:unset;box-sizing:border-box;cursor:pointer;display:flex;justify-content:flex-start;align-items:center;gap:8px;padding:8px 12px;margin-bottom:8px;border-radius:8px;color:var(--muted);font-weight:600;font-size:.85rem}
+  .side-toggle:hover{background:var(--surface-2);color:var(--ink)}
+  .side-toggle:focus-visible{outline:3px solid var(--sun)}
+  .side-toggle svg.bi{width:20px;height:20px}
+  .wrap.wrap-wide,body.admin-wide .top .wrap,body.admin-wide .banner .wrap{max-width:none}
+  .admin.mini{grid-template-columns:52px minmax(0,1fr)}
+  .admin.mini .side .side-toggle{justify-content:center;padding:8px 0}
+  .admin.mini .side-toggle span,.admin.mini .side .lbl-row > span{display:none}
+  .admin.mini .side button{justify-content:center;padding:10px 0;position:relative}
+  .admin.mini .side .lbl-row svg{width:20px;height:20px}
+  .admin.mini .side .badge,.admin.mini .side .cnt-side{position:absolute;top:2px;right:2px;font-size:.62rem;padding:0 5px;line-height:1.5}
+  .admin.mini .side .gear{padding-top:12px}
+}
 @keyframes sheet-up{from{transform:translateY(24px);opacity:0}to{transform:none;opacity:1}}
 @media (prefers-reduced-motion: reduce){*{transition:none!important;animation:none!important}}
 
@@ -1557,6 +1575,8 @@ const LUCIDE = {
   upload: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m17 8-5-5-5 5"/><path d="M12 3v12"/>',
   download: '<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><path d="m7 10 5 5 5-5"/><path d="M12 15V3"/>',
   card: '<rect width="20" height="14" x="2" y="5" rx="2"/><path d="M2 10h20"/>',
+  panelclose: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m16 15-3-3 3-3"/>',
+  panelopen: '<rect width="18" height="18" x="3" y="3" rx="2"/><path d="M9 3v18"/><path d="m14 9 3 3-3 3"/>',
   textsize: '<path d="M4 7V4h16v3"/><path d="M9 20h6"/><path d="M12 4v16"/>'
 };
 function lucide(name, cls) { return '<svg class="' + (cls || "bi") + '" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">' + (LUCIDE[name] || "") + "</svg>"; }
@@ -1587,7 +1607,7 @@ function decorateIcons(root) {
   (root || document).querySelectorAll(".backlink > span[aria-hidden]").forEach(sp => { if (sp.textContent.trim() === "←") sp.outerHTML = lucide("left"); });
   (root || document).querySelectorAll(".top a, .btn").forEach(el => { if (el.dataset.ic || el.childElementCount) return; const t = el.textContent.trim(); if (/^← /.test(t)) { el.dataset.ic = "1"; el.innerHTML = lucide("left") + esc(t.slice(2)); } });
 }
-function render() { renderView(); fixLinks(); decorateIcons(); }
+function render() { renderView(); fixLinks(); decorateIcons(); document.body.classList.toggle("admin-wide", view() === "admin" && !!S.canAdmin && sideMini()); }
 // Swipe left/right on the Diary to move between days, weeks and months
 (function () {
   let sw = null;
@@ -1968,6 +1988,7 @@ async function loadGoogleStatus() {
   catch (e) { S.gStatus = { connected: false, err: true, reason: /not-found|internal|unavailable/i.test((e && e.code) || "") ? "The calendar server isn't set up yet." : (e && e.message) || "Couldn't reach the calendar server." }; }
   S.gStatusLoading = false; render();
 }
+function sideMini() { try { return localStorage.getItem("dogco-side-mini") === "1"; } catch (e) { return !!S.sideMini; } }
 function isOwner() { return !!S.canAdmin && S.role !== "staff"; }
 function roleOf(team, em) { return ((team && team.roles) || {})[String(em || "").toLowerCase()] === "staff" ? "staff" : "admin"; }
 function newEnquiries() { return isOwner() ? (S.enquiries || []).filter(x => x.status !== "done").length : 0; }
@@ -2331,10 +2352,12 @@ function viewAdmin() {
   else body = adminSettings();
   const grp = adminGroups().find(x => x[0] === g);
   const sub = grp && grp[2].length > 1 ? '<div class="subnav" role="tablist" aria-label="' + esc(grp[1]) + ' views">' + grp[2].map(k => { const n = k === "approvals" ? S.bookings.filter(b => b.status === "requested").length : k === "meets" ? (S.meetings || []).filter(m => m.status === "booked" && m.date >= todayISO()).length : k === "messages" ? unreadForTeam() : k === "enquiries" ? newEnquiries() : 0; return '<button role="tab" data-act="tab" data-id="' + k + '"' + (tab === k ? ' aria-selected="true" class="on"' : "") + ">" + SUB_LABEL[k] + (n ? ' <span class="cnt num">' + n + "</span>" : "") + "</button>"; }).join("") + "</div>" : "";
-  const side = adminGroups().map(([k, l, subs]) => '<button data-act="tab" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && (unreadForTeam() + newEnquiries()) && !quiet ? '<span class="cnt-side num" title="Unread messages">' + (unreadForTeam() + newEnquiries()) + "</span>" : "") + "</button>").join("") + (isOwner() ? '<button class="gear side-extra" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" : "") + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
+  const side = adminGroups().map(([k, l, subs]) => '<button data-act="tab" title="' + l + '" data-id="' + (S.lastSub[k] || subs[0]) + '"' + (g === k ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC[k] + "<span>" + l + "</span></span>" + (k === "today" && need && !quiet ? '<span class="badge num" title="Requests and messages waiting">' + need + "</span>" : "") + (k === "messages" && (unreadForTeam() + newEnquiries()) && !quiet ? '<span class="cnt-side num" title="Unread messages">' + (unreadForTeam() + newEnquiries()) + "</span>" : "") + "</button>").join("") + (isOwner() ? '<button class="gear side-extra" title="Settings" data-act="tab" data-id="settings"' + (g === "settings" ? ' aria-current="true"' : "") + ' aria-label="Settings"><span class="lbl-row">' + IC_GEAR + "<span>Settings</span></span></button>" : "") + '<button class="more" data-act="admin-more" aria-haspopup="menu" aria-expanded="' + (S.moreOpen ? "true" : "false") + '"' + (g === "settings" ? ' aria-current="true"' : "") + '><span class="lbl-row">' + GROUP_IC.more + "<span>More</span></span></button>";
   const moreSheet = S.moreOpen ? '<div class="more-back" data-act="admin-more"></div><div class="more-sheet" role="menu">' + (isOwner() ? '<button role="menuitem" data-act="tab" data-id="settings">' + IC_GEAR + "<span>Settings</span></button>" : "") + "<button role=\"menuitem\" data-act=\"admin-site\">" + GROUP_IC.site + '<span>View site</span></button><button role="menuitem" class="danger" data-act="staff-signout">' + IC_OUT + "<span>Sign out</span></button></div>" : "";
-  const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
-  return '<div class="wrap"><div class="admin"><nav class="side" aria-label="Back office">' + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
+  const out = '<button class="signout side-extra" data-act="staff-signout" aria-label="Sign out" title="Sign out"><span class="lbl-row">' + IC_OUT + "<span>Sign out</span></span></button>";
+  const mini = sideMini();
+  const tog = '<button type="button" class="side-toggle" data-act="side-toggle" aria-expanded="' + !mini + '" aria-label="' + (mini ? "Show menu" : "Hide menu") + '" title="' + (mini ? "Show menu" : "Hide menu") + '">' + lucide(mini ? "panelopen" : "panelclose") + "<span>Hide menu</span></button>";
+  return '<div class="wrap' + (mini ? " wrap-wide" : "") + '"><div class="admin' + (mini ? " mini" : "") + '"><nav class="side" aria-label="Back office">' + tog + side + out + '</nav><div class="main">' + sub + body + "</div></div></div>" + moreSheet;
 }
 function actionsFor(b) {
   const a = [];
@@ -2791,6 +2814,7 @@ async function handleClick(e) {
     }
     case "signout": ssoSignOut(); S.me = null; remember(); S.draft = { repeat: 1, serviceId: S.draft.serviceId }; render(); break;
     case "cust-cancel": await patchBooking(id, { status: "cancelled" }); toast("Booking cancelled"); break;
+    case "side-toggle": { const v = !sideMini(); S.sideMini = v; try { localStorage.setItem("dogco-side-mini", v ? "1" : "0"); } catch (e) {} render(); break; }
     case "admin-more": S.moreOpen = !S.moreOpen; render(); break;
     case "admin-site": S.moreOpen = false; navTo("home"); render(); break;
     case "tab": S.moreOpen = false; S.adminTab = id; S.lastSub[groupOf(id)] = id; S.modal = null; if (id === "messages" && S.thread) markRead(S.thread, "team"); navTo("admin"); render(); window.scrollTo({ top: 0, behavior: "instant" }); break;
